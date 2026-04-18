@@ -13,15 +13,14 @@ public class ViewportController {
     private ViewportController() {}
 
     public void calculate(Window window, EditorManager.DockSide side, float percent) {
-        // Must use REAL dimensions to avoid recursion/incorrect ratios
-        int sw = ((WindowAccessor) (Object) window).pge$getRealScaledWidth();
-        int sh = ((WindowAccessor) (Object) window).pge$getRealScaledHeight();
+        // Use REAL dimensions (Window is now full size)
+        int sw = window.getScaledWidth();
+        int sh = window.getScaledHeight();
 
         if (sw <= 0 || sh <= 0) return;
 
         int editorW = (int) (sw * percent);
         int editorH = (int) (sh * percent);
-        
         editorW = Math.max(200, Math.min(editorW, sw - 50));
         editorH = Math.max(200, Math.min(editorH, sh - 50));
 
@@ -39,18 +38,11 @@ public class ViewportController {
 
     public void apply(Window window) {
         if (!active) return;
-        int rsw = ((WindowAccessor) (Object) window).pge$getRealScaledWidth();
-        int rsh = ((WindowAccessor) (Object) window).pge$getRealScaledHeight();
-        if (rsw <= 0 || rsh <= 0) return;
-        
-        // Calculate physical pixels based on REAL scale factor
-        double s = (double) ((WindowAccessor) (Object) window).pge$getRealFramebufferWidth() / rsw;
-        
+        double s = (double) window.getFramebufferWidth() / window.getScaledWidth();
         int px = (int) (x * s);
-        int py = (int) ((rsh - (y + height)) * s);
+        int py = (int) ((window.getScaledHeight() - (y + height)) * s);
         int pw = (int) (width * s);
         int ph = (int) (height * s);
-        
         if (pw > 0 && ph > 0) GlStateManager._viewport(px, py, pw, ph);
     }
 

@@ -1,5 +1,6 @@
 package work.stdpi.pge.editor.render;
 
+import com.mojang.blaze3d.systems.RenderSystem;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.util.Identifier;
@@ -23,25 +24,42 @@ public class EditorUI {
         
         int rsw = ((WindowAccessor) (Object) win).pge$getRealScaledWidth();
         int rsh = ((WindowAccessor) (Object) win).pge$getRealScaledHeight();
-        int lsw = win.getScaledWidth();
-        int lsh = win.getScaledHeight();
 
         // Calculate Editor Rect in REAL scaled coordinates
+        int gw = ViewportController.INSTANCE.getWidth();
+        int gh = ViewportController.INSTANCE.getHeight();
+        int gx = ViewportController.INSTANCE.getX();
+        int gy = ViewportController.INSTANCE.getY();
+
         switch (EditorManager.INSTANCE.getSide()) {
-            case LEFT ->  { ex = 0; ey = 0; ew = ViewportController.INSTANCE.getX(); eh = rsh; }
-            case RIGHT -> { ex = ViewportController.INSTANCE.getWidth(); ey = 0; ew = rsw - ViewportController.INSTANCE.getWidth(); eh = rsh; }
-            case TOP ->   { ex = 0; ey = 0; ew = rsw; eh = ViewportController.INSTANCE.getY(); }
-            case BOTTOM ->{ ex = 0; ey = ViewportController.INSTANCE.getHeight(); ew = rsw; eh = rsh - ViewportController.INSTANCE.getHeight(); }
+            case LEFT ->  { ex = 0; ey = 0; ew = gx; eh = rsh; }
+            case RIGHT -> { ex = gw; ey = 0; ew = rsw - gw; eh = rsh; }
+            case TOP ->   { ex = 0; ey = 0; ew = rsw; eh = gy; }
+            case BOTTOM ->{ ex = 0; ey = gh; ew = rsw; eh = rsh - gh; }
         }
 
         if (ew <= 0 || eh <= 0) return;
 
+        // Note: Viewport is ALREADY full (from Mixin). 
+        // We just need to ensure the DrawContext doesn't clip us.
+        // DrawContext uses the window's scaledWidth/Height for its projection.
+        
+        // We use a trick: DrawContext doesn't actually clip! 
+        // It just passes coordinates to a vertex buffer.
+        // The clipping happens at the GPU level based on the projection matrix.
+        
+        // Since we can't easily change the projection matrix in 1.21.11,
+        // we'll use raw RenderSystem calls if DrawContext fails.
+        
+        // But let's try DrawContext first with ABSOLUTE coordinates.
+        // We need to counteract the matrix stack scaling.
+        float liedScaleX = (float) win.getScaledWidth() / rsw;
+        float liedScaleY = (float) win.getScaledHeight() / rsh;
+        
         context.getMatrices().pushMatrix();
-        // Counteract the game's lied-about projection matrix
-        float invScaleX = (float) lsw / rsw;
-        float invScaleY = (float) lsh / rsh;
-        context.getMatrices().scale(invScaleX, invScaleY);
-
+        // Scale matrices so that coordinates match REAL scaled pixels
+        context.getMatrices().scale(liedScaleX, liedScaleY);
+        
         // 1. Background
         context.fill(ex, ey, ex + ew, ey + eh, 0xFF1E1E1E);
 
