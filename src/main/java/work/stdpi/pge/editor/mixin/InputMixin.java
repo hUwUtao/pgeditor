@@ -13,6 +13,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import work.stdpi.pge.editor.logic.ViewportController;
 import work.stdpi.pge.editor.render.EditorUI;
+import work.stdpi.pge.editor.WindowAccessor;
 
 public class InputMixin {
     @Mixin(Mouse.class)
@@ -22,9 +23,12 @@ public class InputMixin {
 
         @Inject(method = "onCursorPos", at = @At("RETURN"))
         private void remapMouse(long win, double x, double y, CallbackInfo ci) {
-            if (ViewportController.INSTANCE.isActive()) {
+            if (ViewportController.INSTANCE.isActive()
+                && ViewportController.INSTANCE.isWindowMetricsOverridden()
+                && MinecraftClient.getInstance().currentScreen == null) {
                 var window = MinecraftClient.getInstance().getWindow();
-                double s = (double) window.getFramebufferWidth() / window.getScaledWidth();
+                double s = (double) ((WindowAccessor) (Object) window).pge$getRealFramebufferWidth()
+                    / ((WindowAccessor) (Object) window).pge$getRealScaledWidth();
                 this.x -= ViewportController.INSTANCE.getX() * s;
                 this.y -= ViewportController.INSTANCE.getY() * s;
             }

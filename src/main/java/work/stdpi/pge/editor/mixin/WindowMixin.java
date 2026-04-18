@@ -35,28 +35,28 @@ public abstract class WindowMixin implements WindowAccessor {
 
     @Inject(method = "getFramebufferWidth", at = @At("HEAD"), cancellable = true)
     private void getFramebufferWidth(CallbackInfoReturnable<Integer> cir) {
-        if (ViewportController.INSTANCE.isActive()) {
+        if (ViewportController.INSTANCE.isActive() && ViewportController.INSTANCE.isWindowMetricsOverridden()) {
             cir.setReturnValue((int) (ViewportController.INSTANCE.getWidth() * pge$getScale()));
         }
     }
 
     @Inject(method = "getFramebufferHeight", at = @At("HEAD"), cancellable = true)
     private void getFramebufferHeight(CallbackInfoReturnable<Integer> cir) {
-        if (ViewportController.INSTANCE.isActive()) {
+        if (ViewportController.INSTANCE.isActive() && ViewportController.INSTANCE.isWindowMetricsOverridden()) {
             cir.setReturnValue((int) (ViewportController.INSTANCE.getHeight() * pge$getScale()));
         }
     }
 
     @Inject(method = "getScaledWidth", at = @At("HEAD"), cancellable = true)
     private void getScaledWidth(CallbackInfoReturnable<Integer> cir) {
-        if (ViewportController.INSTANCE.isActive()) {
+        if (ViewportController.INSTANCE.isActive() && ViewportController.INSTANCE.isWindowMetricsOverridden()) {
             cir.setReturnValue(ViewportController.INSTANCE.getWidth());
         }
     }
 
     @Inject(method = "getScaledHeight", at = @At("HEAD"), cancellable = true)
     private void getScaledHeight(CallbackInfoReturnable<Integer> cir) {
-        if (ViewportController.INSTANCE.isActive()) {
+        if (ViewportController.INSTANCE.isActive() && ViewportController.INSTANCE.isWindowMetricsOverridden()) {
             cir.setReturnValue(ViewportController.INSTANCE.getHeight());
         }
     }

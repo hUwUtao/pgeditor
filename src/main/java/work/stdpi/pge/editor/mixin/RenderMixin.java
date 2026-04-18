@@ -19,6 +19,7 @@ public class RenderMixin {
     public static class GameRendererMixin {
         @Inject(method = "render", at = @At("HEAD"))
         private void beforeRender(RenderTickCounter d, boolean t, CallbackInfo ci) {
+            ViewportController.INSTANCE.setWindowMetricsOverridden(false);
             if (ViewportController.INSTANCE.isActive()) {
                 var win = MinecraftClient.getInstance().getWindow();
                 int rw = ((WindowAccessor) (Object) win).pge$getRealFramebufferWidth();
@@ -27,22 +28,32 @@ public class RenderMixin {
             }
         }
 
+        @Inject(method = "render", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/render/GameRenderer;renderWorld(Lnet/minecraft/client/render/RenderTickCounter;)V"))
+        private void beforeWorldRender(RenderTickCounter d, boolean t, CallbackInfo ci) {
+            if (ViewportController.INSTANCE.isActive()) {
+                ViewportController.INSTANCE.setWindowMetricsOverridden(true);
+                ViewportController.INSTANCE.apply(MinecraftClient.getInstance().getWindow());
+            }
+        }
+
         @Inject(method = "render", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/render/GameRenderer;renderWorld(Lnet/minecraft/client/render/RenderTickCounter;)V", shift = At.Shift.AFTER))
-        private void fixWorldViewport(CallbackInfo ci) {
+        private void fixWorldViewport(RenderTickCounter d, boolean t, CallbackInfo ci) {
             if (ViewportController.INSTANCE.isActive()) {
                 ViewportController.INSTANCE.apply(MinecraftClient.getInstance().getWindow());
             }
         }
 
         @Inject(method = "render", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/gui/hud/InGameHud;render(Lnet/minecraft/client/gui/DrawContext;Lnet/minecraft/client/render/RenderTickCounter;)V"))
-        private void beforeHud(CallbackInfo ci) {
+        private void beforeHud(RenderTickCounter d, boolean t, CallbackInfo ci) {
             if (ViewportController.INSTANCE.isActive()) {
+                ViewportController.INSTANCE.setWindowMetricsOverridden(true);
                 ViewportController.INSTANCE.apply(MinecraftClient.getInstance().getWindow());
             }
         }
 
         @Inject(method = "render", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/gui/hud/InGameHud;render(Lnet/minecraft/client/gui/DrawContext;Lnet/minecraft/client/render/RenderTickCounter;)V", shift = At.Shift.AFTER))
-        private void afterHud(CallbackInfo ci) {
+        private void afterHud(RenderTickCounter d, boolean t, CallbackInfo ci) {
+            ViewportController.INSTANCE.setWindowMetricsOverridden(false);
             if (ViewportController.INSTANCE.isActive()) {
                 var win = MinecraftClient.getInstance().getWindow();
                 int rw = ((WindowAccessor) (Object) win).pge$getRealFramebufferWidth();
@@ -62,7 +73,6 @@ public class RenderMixin {
                 int rh = ((WindowAccessor) (Object) win).pge$getRealFramebufferHeight();
                 GlStateManager._viewport(0, 0, rw, rh);
                 EditorUI.INSTANCE.render(g);
-                ViewportController.INSTANCE.apply(win);
             }
         }
     }

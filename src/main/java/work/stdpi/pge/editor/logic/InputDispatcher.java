@@ -8,6 +8,7 @@ import javax.swing.SwingUtilities;
 
 public class InputDispatcher {
     public static void dispatchMouse(Component widget, int x, int y, int button, int action, int mods) {
+        if (widget == null) return;
         int type = (action == GLFW.GLFW_PRESS) ? MouseEvent.MOUSE_PRESSED : MouseEvent.MOUSE_RELEASED;
         int awtBtn = switch (button) {
             case GLFW.GLFW_MOUSE_BUTTON_LEFT -> MouseEvent.BUTTON1;
@@ -18,6 +19,7 @@ public class InputDispatcher {
 
         MouseEvent ev = new MouseEvent(widget, type, System.currentTimeMillis(), getMods(mods), x, y, 1, false, awtBtn);
         SwingUtilities.invokeLater(() -> {
+            widget.requestFocusInWindow();
             widget.dispatchEvent(ev);
             if (action == GLFW.GLFW_RELEASE) {
                 widget.dispatchEvent(new MouseEvent(widget, MouseEvent.MOUSE_CLICKED, System.currentTimeMillis(), getMods(mods), x, y, 1, false, awtBtn));
@@ -26,21 +28,30 @@ public class InputDispatcher {
     }
 
     public static void dispatchMove(Component widget, int x, int y) {
+        if (widget == null) return;
         MouseEvent ev = new MouseEvent(widget, MouseEvent.MOUSE_MOVED, System.currentTimeMillis(), 0, x, y, 0, false, MouseEvent.NOBUTTON);
         SwingUtilities.invokeLater(() -> widget.dispatchEvent(ev));
     }
 
     public static void dispatchKey(Component widget, int key, int action, int mods) {
+        if (widget == null) return;
         int type = (action == GLFW.GLFW_RELEASE) ? KeyEvent.KEY_RELEASED : KeyEvent.KEY_PRESSED;
         int awtKey = translate(key);
         if (awtKey == KeyEvent.VK_UNDEFINED) return;
         KeyEvent ev = new KeyEvent(widget, type, System.currentTimeMillis(), getMods(mods), awtKey, KeyEvent.CHAR_UNDEFINED);
-        SwingUtilities.invokeLater(() -> widget.dispatchEvent(ev));
+        SwingUtilities.invokeLater(() -> {
+            widget.requestFocusInWindow();
+            widget.dispatchEvent(ev);
+        });
     }
 
     public static void dispatchChar(Component widget, int codepoint) {
+        if (widget == null) return;
         KeyEvent ev = new KeyEvent(widget, KeyEvent.KEY_TYPED, System.currentTimeMillis(), 0, KeyEvent.VK_UNDEFINED, (char) codepoint);
-        SwingUtilities.invokeLater(() -> widget.dispatchEvent(ev));
+        SwingUtilities.invokeLater(() -> {
+            widget.requestFocusInWindow();
+            widget.dispatchEvent(ev);
+        });
     }
 
     private static int getMods(int mods) {
