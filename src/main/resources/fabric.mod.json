@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "id": "pge-editor",
+  "version": "${version}",
+  "name": "Paper Engine Editor",
+  "description": "Editor for Paper Engine",
+  "authors": [
+    "stdpi"
+  ],
+  "contact": {
+    "homepage": "https://fabricmc.net/",
+    "sources": "https://github.com/FabricMC/fabric-example-mod"
+  },
+  "license": "MIT",
+  "icon": "assets/pge-editor/icon.png",
+  "environment": "client",
+  "entrypoints": {
+    "client": [
+      "work.stdpi.pge.editor.EditorClient"
+    ]
+  },
+  "mixins": [
+    "pge-editor.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": ">=0.16.5",
+    "minecraft": "~1.21.1",
+    "java": ">=21"
+  }
+}
