@@ -20,41 +20,46 @@ public abstract class WindowMixin implements WindowAccessor {
     @Accessor("framebufferHeight")
     public abstract int pge$getRealFramebufferHeight();
 
+    @Override
     @Accessor("scaledWidth")
     public abstract int pge$getRealScaledWidth();
 
+    @Override
     @Accessor("scaledHeight")
     public abstract int pge$getRealScaledHeight();
 
     private double pge$getScale() {
-        return (double) pge$getRealFramebufferWidth() / pge$getRealScaledWidth();
+        int sw = pge$getRealScaledWidth();
+        return sw > 0 ? (double) pge$getRealFramebufferWidth() / sw : 1.0;
     }
 
     @Inject(method = "getFramebufferWidth", at = @At("HEAD"), cancellable = true)
     private void getFramebufferWidth(CallbackInfoReturnable<Integer> cir) {
         if (ViewportController.INSTANCE.isActive()) {
-            cir.setReturnValue((int) (ViewportController.INSTANCE.getWidth() * pge$getScale()));
+            int w = (int) (ViewportController.INSTANCE.getWidth() * pge$getScale());
+            cir.setReturnValue(Math.max(1, w));
         }
     }
 
     @Inject(method = "getFramebufferHeight", at = @At("HEAD"), cancellable = true)
     private void getFramebufferHeight(CallbackInfoReturnable<Integer> cir) {
         if (ViewportController.INSTANCE.isActive()) {
-            cir.setReturnValue((int) (ViewportController.INSTANCE.getHeight() * pge$getScale()));
+            int h = (int) (ViewportController.INSTANCE.getHeight() * pge$getScale());
+            cir.setReturnValue(Math.max(1, h));
         }
     }
 
     @Inject(method = "getScaledWidth", at = @At("HEAD"), cancellable = true)
     private void getScaledWidth(CallbackInfoReturnable<Integer> cir) {
         if (ViewportController.INSTANCE.isActive()) {
-            cir.setReturnValue(ViewportController.INSTANCE.getWidth());
+            cir.setReturnValue(Math.max(1, ViewportController.INSTANCE.getWidth()));
         }
     }
 
     @Inject(method = "getScaledHeight", at = @At("HEAD"), cancellable = true)
     private void getScaledHeight(CallbackInfoReturnable<Integer> cir) {
         if (ViewportController.INSTANCE.isActive()) {
-            cir.setReturnValue(ViewportController.INSTANCE.getHeight());
+            cir.setReturnValue(Math.max(1, ViewportController.INSTANCE.getHeight()));
         }
     }
 }

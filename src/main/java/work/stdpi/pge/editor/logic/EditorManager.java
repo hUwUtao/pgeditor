@@ -20,7 +20,6 @@ public class EditorManager {
     private EditorManager() {}
 
     public void init() {
-        // In 1.21.11, the constructor changed to take KeyBinding.Category instead of String
         toggleKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
             "key.pge-editor.toggle",
             InputUtil.Type.KEYSYM,
@@ -38,14 +37,21 @@ public class EditorManager {
 
     public void setEnabled(boolean enabled) {
         this.enabled = enabled;
-        ViewportController.INSTANCE.setActive(enabled);
         MinecraftClient client = MinecraftClient.getInstance();
+        
         if (enabled) {
+            // 1. Calculate new layout using REAL window size
             update();
+            // 2. ONLY THEN activate the override flag to prevent feedback loops
+            ViewportController.INSTANCE.setActive(true);
             client.mouse.unlockCursor();
         } else {
+            // 1. Deactivate override immediately
+            ViewportController.INSTANCE.setActive(false);
             client.mouse.lockCursor();
         }
+        
+        // Force MC to re-calculate UI scales and re-allocate framebuffers
         client.onResolutionChanged();
     }
 

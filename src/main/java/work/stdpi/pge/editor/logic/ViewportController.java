@@ -2,6 +2,7 @@ package work.stdpi.pge.editor.logic;
 
 import com.mojang.blaze3d.opengl.GlStateManager;
 import net.minecraft.client.util.Window;
+import work.stdpi.pge.editor.WindowAccessor;
 
 public class ViewportController {
     public static final ViewportController INSTANCE = new ViewportController();
@@ -12,8 +13,11 @@ public class ViewportController {
     private ViewportController() {}
 
     public void calculate(Window window, EditorManager.DockSide side, float percent) {
-        int sw = window.getScaledWidth();
-        int sh = window.getScaledHeight();
+        // Use bridge to get REAL dimensions, avoiding recursion with WindowMixin
+        int sw = ((WindowAccessor) (Object) window).pge$getRealScaledWidth();
+        int sh = ((WindowAccessor) (Object) window).pge$getRealScaledHeight();
+
+        if (sw <= 0 || sh <= 0) return;
 
         int editorW = (int) (sw * percent);
         int editorH = (int) (sh * percent);
@@ -35,11 +39,15 @@ public class ViewportController {
 
     public void apply(Window window) {
         if (!active) return;
-        double s = (double) window.getFramebufferWidth() / window.getScaledWidth();
+        int sw = ((WindowAccessor) (Object) window).pge$getRealScaledWidth();
+        if (sw <= 0) return;
+        
+        double s = (double) ((WindowAccessor) (Object) window).pge$getRealFramebufferWidth() / sw;
         int px = (int) (x * s);
-        int py = (int) ((window.getScaledHeight() - (y + height)) * s);
+        int py = (int) ((((WindowAccessor) (Object) window).pge$getRealScaledHeight() - (y + height)) * s);
         int pw = (int) (width * s);
         int ph = (int) (height * s);
+        
         if (pw > 0 && ph > 0) GlStateManager._viewport(px, py, pw, ph);
     }
 
