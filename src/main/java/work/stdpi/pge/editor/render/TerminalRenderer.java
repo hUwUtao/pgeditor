@@ -44,8 +44,8 @@ public class TerminalRenderer {
                 var img = new java.awt.image.BufferedImage(w, h, java.awt.image.BufferedImage.TYPE_INT_ARGB);
                 var g = img.createGraphics();
                 
-                // Clear with white so we can see if JediTerm is drawing anything
-                g.setColor(Color.WHITE);
+                // Clear with RED for debugging. If you see red, texture works.
+                g.setColor(Color.RED);
                 g.fillRect(0, 0, w, h);
                 
                 widget.paint(g);
@@ -53,8 +53,12 @@ public class TerminalRenderer {
                 
                 for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) {
                     int c = img.getRGB(x, y);
-                    // ABGR for NativeImage
-                    nativeImage.setColor(x, y, ((c >> 24) & 0xFF) << 24 | (c & 0xFF) << 16 | ((c >> 8) & 0xFF) << 8 | ((c >> 16) & 0xFF));
+                    // ABGR: 0x AA BB GG RR
+                    int a = (c >> 24) & 0xFF;
+                    int r = (c >> 16) & 0xFF;
+                    int g8 = (c >> 8) & 0xFF;
+                    int b = c & 0xFF;
+                    nativeImage.setColor(x, y, (a << 24) | (b << 16) | (g8 << 8) | r);
                 }
             });
             texture.upload();

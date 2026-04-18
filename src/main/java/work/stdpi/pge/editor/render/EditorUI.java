@@ -1,6 +1,5 @@
 package work.stdpi.pge.editor.render;
 
-import com.mojang.blaze3d.systems.RenderSystem;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.util.Identifier;
@@ -25,11 +24,11 @@ public class EditorUI {
         int rsw = ((WindowAccessor) (Object) win).pge$getRealScaledWidth();
         int rsh = ((WindowAccessor) (Object) win).pge$getRealScaledHeight();
 
-        // Calculate Editor Rect in REAL scaled coordinates
-        int gw = ViewportController.INSTANCE.getWidth();
-        int gh = ViewportController.INSTANCE.getHeight();
+        // EDITOR zone
         int gx = ViewportController.INSTANCE.getX();
         int gy = ViewportController.INSTANCE.getY();
+        int gw = ViewportController.INSTANCE.getWidth();
+        int gh = ViewportController.INSTANCE.getHeight();
 
         switch (EditorManager.INSTANCE.getSide()) {
             case LEFT ->  { ex = 0; ey = 0; ew = gx; eh = rsh; }
@@ -40,27 +39,13 @@ public class EditorUI {
 
         if (ew <= 0 || eh <= 0) return;
 
-        // Note: Viewport is ALREADY full (from Mixin). 
-        // We just need to ensure the DrawContext doesn't clip us.
-        // DrawContext uses the window's scaledWidth/Height for its projection.
-        
-        // We use a trick: DrawContext doesn't actually clip! 
-        // It just passes coordinates to a vertex buffer.
-        // The clipping happens at the GPU level based on the projection matrix.
-        
-        // Since we can't easily change the projection matrix in 1.21.11,
-        // we'll use raw RenderSystem calls if DrawContext fails.
-        
-        // But let's try DrawContext first with ABSOLUTE coordinates.
-        // We need to counteract the matrix stack scaling.
         float liedScaleX = (float) win.getScaledWidth() / rsw;
         float liedScaleY = (float) win.getScaledHeight() / rsh;
         
         context.getMatrices().pushMatrix();
-        // Scale matrices so that coordinates match REAL scaled pixels
         context.getMatrices().scale(liedScaleX, liedScaleY);
         
-        // 1. Background
+        // 1. Fill background
         context.fill(ex, ey, ex + ew, ey + eh, 0xFF1E1E1E);
 
         if (!init) { term.init(ew, eh); init = true; } else { term.resize(ew, eh); }
@@ -70,6 +55,7 @@ public class EditorUI {
         if (tex != null) {
             var id = Identifier.of("pge-editor", "term");
             mc.getTextureManager().registerTexture(id, tex);
+            // Try 9 args: Identifier, x1, x2, y1, y2, u1, u2, v1, v2
             context.drawTexturedQuad(id, ex, ex + ew, ey, ey + eh, 0f, 1f, 0f, 1f);
         }
 
