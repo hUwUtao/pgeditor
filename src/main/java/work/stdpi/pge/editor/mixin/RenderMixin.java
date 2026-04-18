@@ -23,24 +23,16 @@ public class RenderMixin {
                 var win = MinecraftClient.getInstance().getWindow();
                 int rw = ((WindowAccessor) (Object) win).pge$getRealFramebufferWidth();
                 int rh = ((WindowAccessor) (Object) win).pge$getRealFramebufferHeight();
-                // Ensure FULL viewport for the CLEAR operation at start of frame
+                // Ensure FULL viewport for the CLEAR operation
                 GlStateManager._viewport(0, 0, rw, rh);
             }
         }
 
-        @Inject(method = "render", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/render/GameRenderer;renderWorld(Lnet/minecraft/client/render/RenderTickCounter;)V"))
-        private void beforeWorld(CallbackInfo ci) {
+        @Inject(method = "render", at = @At(value = "INVOKE", target = "Lcom/mojang/blaze3d/systems/RenderSystem;viewport(IIII)V", shift = At.Shift.AFTER))
+        private void fixWorldViewport(CallbackInfo ci) {
+            // GameRenderer.renderWorld calls RenderSystem.viewport(0, 0, smallW, smallH)
+            // We must override it immediately to shift the world
             ViewportController.INSTANCE.apply(MinecraftClient.getInstance().getWindow());
-        }
-
-        @Inject(method = "render", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/render/GameRenderer;renderWorld(Lnet/minecraft/client/render/RenderTickCounter;)V", shift = At.Shift.AFTER))
-        private void afterWorld(CallbackInfo ci) {
-            if (ViewportController.INSTANCE.isActive()) {
-                var win = MinecraftClient.getInstance().getWindow();
-                int rw = ((WindowAccessor) (Object) win).pge$getRealFramebufferWidth();
-                int rh = ((WindowAccessor) (Object) win).pge$getRealFramebufferHeight();
-                GlStateManager._viewport(0, 0, rw, rh);
-            }
         }
 
         @Inject(method = "render", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/gui/hud/InGameHud;render(Lnet/minecraft/client/gui/DrawContext;Lnet/minecraft/client/render/RenderTickCounter;)V"))

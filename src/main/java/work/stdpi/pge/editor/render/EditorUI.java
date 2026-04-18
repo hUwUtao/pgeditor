@@ -20,34 +20,42 @@ public class EditorUI {
         if (!EditorManager.INSTANCE.isEnabled()) return;
         var mc = MinecraftClient.getInstance();
         var win = mc.getWindow();
-        int sw = win.getScaledWidth(), sh = win.getScaledHeight();
         
-        // Logical start of the GAME area
-        int gx = ViewportController.INSTANCE.getX(), gy = ViewportController.INSTANCE.getY();
-        int gw = ViewportController.INSTANCE.getWidth(), gh = ViewportController.INSTANCE.getHeight();
+        int rsw = ((WindowAccessor) (Object) win).pge$getRealScaledWidth();
+        int rsh = ((WindowAccessor) (Object) win).pge$getRealScaledHeight();
+        int lsw = win.getScaledWidth();
+        int lsh = win.getScaledHeight();
 
+        // Calculate Editor Rect in REAL scaled coordinates
         switch (EditorManager.INSTANCE.getSide()) {
-            case LEFT ->  { ex = 0; ey = 0; ew = gx; eh = sh; }
-            case RIGHT -> { ex = gw; ey = 0; ew = sw - gw; eh = sh; }
-            case TOP ->   { ex = 0; ey = 0; ew = sw; eh = gy; }
-            case BOTTOM ->{ ex = 0; ey = gh; ew = sw; eh = sh - gh; }
+            case LEFT ->  { ex = 0; ey = 0; ew = ViewportController.INSTANCE.getX(); eh = rsh; }
+            case RIGHT -> { ex = ViewportController.INSTANCE.getWidth(); ey = 0; ew = rsw - ViewportController.INSTANCE.getWidth(); eh = rsh; }
+            case TOP ->   { ex = 0; ey = 0; ew = rsw; eh = ViewportController.INSTANCE.getY(); }
+            case BOTTOM ->{ ex = 0; ey = ViewportController.INSTANCE.getHeight(); ew = rsw; eh = rsh - ViewportController.INSTANCE.getHeight(); }
         }
 
         if (ew <= 0 || eh <= 0) return;
-        
-        // 1. Draw solid background to cover world residue
-        context.fill(ex, ey, ex + ew, ey + eh, 0xFF1E1E1E); // VSCode-ish dark gray
+
+        context.getMatrices().pushMatrix();
+        // Counteract the game's lied-about projection matrix
+        float invScaleX = (float) lsw / rsw;
+        float invScaleY = (float) lsh / rsh;
+        context.getMatrices().scale(invScaleX, invScaleY);
+
+        // 1. Background
+        context.fill(ex, ey, ex + ew, ey + eh, 0xFF1E1E1E);
 
         if (!init) { term.init(ew, eh); init = true; } else { term.resize(ew, eh); }
         term.update();
 
         var tex = term.getTexture();
-        if (tex == null) return;
-        var id = Identifier.of("pge-editor", "term");
-        mc.getTextureManager().registerTexture(id, tex);
-        
-        // 2. Draw terminal on top
-        context.drawTexturedQuad(id, ex, ex + ew, ey, ey + eh, 0f, 1f, 0f, 1f);
+        if (tex != null) {
+            var id = Identifier.of("pge-editor", "term");
+            mc.getTextureManager().registerTexture(id, tex);
+            context.drawTexturedQuad(id, ex, ex + ew, ey, ey + eh, 0f, 1f, 0f, 1f);
+        }
+
+        context.getMatrices().popMatrix();
     }
 
     public boolean onMouse(int b, int a, int m) {
@@ -77,7 +85,6 @@ public class EditorUI {
     public boolean onKey(int k, int a, int m) {
         if (!EditorManager.INSTANCE.isEnabled()) return false;
         if (k == GLFW.GLFW_KEY_BACKSLASH) return false;
-        
         if (focused) {
             InputDispatcher.dispatchKey(term.getWidget(), k, a, m);
             return true;
