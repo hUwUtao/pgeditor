@@ -19,11 +19,37 @@ public class RenderMixin {
     public static class GameRendererMixin {
         @Inject(method = "render", at = @At("HEAD"))
         private void beforeRender(RenderTickCounter d, boolean t, CallbackInfo ci) {
+            if (ViewportController.INSTANCE.isActive()) {
+                var win = MinecraftClient.getInstance().getWindow();
+                int rw = ((WindowAccessor) (Object) win).pge$getRealFramebufferWidth();
+                int rh = ((WindowAccessor) (Object) win).pge$getRealFramebufferHeight();
+                // Ensure FULL viewport for the CLEAR operation at start of frame
+                GlStateManager._viewport(0, 0, rw, rh);
+            }
+        }
+
+        @Inject(method = "render", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/render/GameRenderer;renderWorld(Lnet/minecraft/client/render/RenderTickCounter;)V"))
+        private void beforeWorld(CallbackInfo ci) {
             ViewportController.INSTANCE.apply(MinecraftClient.getInstance().getWindow());
         }
 
-        @Inject(method = "render", at = @At("RETURN"))
-        private void afterRender(RenderTickCounter d, boolean t, CallbackInfo ci) {
+        @Inject(method = "render", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/render/GameRenderer;renderWorld(Lnet/minecraft/client/render/RenderTickCounter;)V", shift = At.Shift.AFTER))
+        private void afterWorld(CallbackInfo ci) {
+            if (ViewportController.INSTANCE.isActive()) {
+                var win = MinecraftClient.getInstance().getWindow();
+                int rw = ((WindowAccessor) (Object) win).pge$getRealFramebufferWidth();
+                int rh = ((WindowAccessor) (Object) win).pge$getRealFramebufferHeight();
+                GlStateManager._viewport(0, 0, rw, rh);
+            }
+        }
+
+        @Inject(method = "render", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/gui/hud/InGameHud;render(Lnet/minecraft/client/gui/DrawContext;Lnet/minecraft/client/render/RenderTickCounter;)V"))
+        private void beforeHud(CallbackInfo ci) {
+            ViewportController.INSTANCE.apply(MinecraftClient.getInstance().getWindow());
+        }
+
+        @Inject(method = "render", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/gui/hud/InGameHud;render(Lnet/minecraft/client/gui/DrawContext;Lnet/minecraft/client/render/RenderTickCounter;)V", shift = At.Shift.AFTER))
+        private void afterHud(CallbackInfo ci) {
             if (ViewportController.INSTANCE.isActive()) {
                 var win = MinecraftClient.getInstance().getWindow();
                 int rw = ((WindowAccessor) (Object) win).pge$getRealFramebufferWidth();
@@ -37,7 +63,16 @@ public class RenderMixin {
     public static class InGameHudMixin {
         @Inject(method = "render", at = @At("RETURN"))
         private void renderEditor(DrawContext g, RenderTickCounter d, CallbackInfo ci) {
-            EditorUI.INSTANCE.render(g);
+            if (ViewportController.INSTANCE.isActive()) {
+                var win = MinecraftClient.getInstance().getWindow();
+                int rw = ((WindowAccessor) (Object) win).pge$getRealFramebufferWidth();
+                int rh = ((WindowAccessor) (Object) win).pge$getRealFramebufferHeight();
+                // Ensure FULL viewport for EditorUI drawing
+                GlStateManager._viewport(0, 0, rw, rh);
+                EditorUI.INSTANCE.render(g);
+                // Re-apply for any subsequent HUD elements
+                ViewportController.INSTANCE.apply(win);
+            }
         }
     }
 }

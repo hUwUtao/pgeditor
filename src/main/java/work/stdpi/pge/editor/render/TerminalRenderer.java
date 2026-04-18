@@ -8,6 +8,7 @@ import com.jediterm.terminal.ProcessTtyConnector;
 import com.pty4j.PtyProcessBuilder;
 import javax.swing.SwingUtilities;
 import java.awt.Dimension;
+import java.awt.Color;
 import java.nio.charset.StandardCharsets;
 
 public class TerminalRenderer {
@@ -33,7 +34,6 @@ public class TerminalRenderer {
     private void refreshTexture() {
         if (nativeImage != null) { nativeImage.close(); texture.close(); }
         nativeImage = new NativeImage(w, h, true);
-        // In 1.21.11, the constructor changed to take a Supplier<String> name
         texture = new NativeImageBackedTexture(() -> "pge_term", nativeImage);
     }
 
@@ -43,10 +43,17 @@ public class TerminalRenderer {
             SwingUtilities.invokeAndWait(() -> {
                 var img = new java.awt.image.BufferedImage(w, h, java.awt.image.BufferedImage.TYPE_INT_ARGB);
                 var g = img.createGraphics();
+                
+                // Clear with white so we can see if JediTerm is drawing anything
+                g.setColor(Color.WHITE);
+                g.fillRect(0, 0, w, h);
+                
                 widget.paint(g);
                 g.dispose();
+                
                 for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) {
                     int c = img.getRGB(x, y);
+                    // ABGR for NativeImage
                     nativeImage.setColor(x, y, ((c >> 24) & 0xFF) << 24 | (c & 0xFF) << 16 | ((c >> 8) & 0xFF) << 8 | ((c >> 16) & 0xFF));
                 }
             });

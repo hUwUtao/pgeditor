@@ -28,27 +28,6 @@ public abstract class WindowMixin implements WindowAccessor {
     @Accessor("scaledHeight")
     public abstract int pge$getRealScaledHeight();
 
-    private double pge$getScale() {
-        int sw = pge$getRealScaledWidth();
-        return sw > 0 ? (double) pge$getRealFramebufferWidth() / sw : 1.0;
-    }
-
-    @Inject(method = "getFramebufferWidth", at = @At("HEAD"), cancellable = true)
-    private void getFramebufferWidth(CallbackInfoReturnable<Integer> cir) {
-        if (ViewportController.INSTANCE.isActive()) {
-            int w = (int) (ViewportController.INSTANCE.getWidth() * pge$getScale());
-            cir.setReturnValue(Math.max(1, w));
-        }
-    }
-
-    @Inject(method = "getFramebufferHeight", at = @At("HEAD"), cancellable = true)
-    private void getFramebufferHeight(CallbackInfoReturnable<Integer> cir) {
-        if (ViewportController.INSTANCE.isActive()) {
-            int h = (int) (ViewportController.INSTANCE.getHeight() * pge$getScale());
-            cir.setReturnValue(Math.max(1, h));
-        }
-    }
-
     @Inject(method = "getScaledWidth", at = @At("HEAD"), cancellable = true)
     private void getScaledWidth(CallbackInfoReturnable<Integer> cir) {
         if (ViewportController.INSTANCE.isActive()) {
