@@ -68,6 +68,7 @@ public class RenderMixin {
         @Inject(method = "render", at = @At("RETURN"))
         private void renderEditor(DrawContext g, RenderTickCounter d, CallbackInfo ci) {
             if (ViewportController.INSTANCE.isActive()) {
+                ViewportController.INSTANCE.setWindowMetricsOverridden(false);
                 var win = MinecraftClient.getInstance().getWindow();
                 int rw = ((WindowAccessor) (Object) win).pge$getRealFramebufferWidth();
                 int rh = ((WindowAccessor) (Object) win).pge$getRealFramebufferHeight();
