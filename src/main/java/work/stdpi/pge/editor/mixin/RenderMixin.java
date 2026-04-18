@@ -17,36 +17,43 @@ import work.stdpi.pge.editor.WindowAccessor;
 public class RenderMixin {
     @Mixin(GameRenderer.class)
     public static class GameRendererMixin {
+        private boolean pge$useViewportMetrics() {
+            MinecraftClient client = MinecraftClient.getInstance();
+            return ViewportController.INSTANCE.isActive() && client.currentScreen == null;
+        }
+
         @Inject(method = "render", at = @At("HEAD"))
         private void beforeRender(RenderTickCounter d, boolean t, CallbackInfo ci) {
-            ViewportController.INSTANCE.setWindowMetricsOverridden(false);
+            ViewportController.INSTANCE.setWindowMetricsOverridden(pge$useViewportMetrics());
             if (ViewportController.INSTANCE.isActive()) {
                 var win = MinecraftClient.getInstance().getWindow();
                 int rw = ((WindowAccessor) (Object) win).pge$getRealFramebufferWidth();
                 int rh = ((WindowAccessor) (Object) win).pge$getRealFramebufferHeight();
-                GlStateManager._viewport(0, 0, rw, rh);
+                if (pge$useViewportMetrics()) {
+                    ViewportController.INSTANCE.apply(win);
+                } else {
+                    GlStateManager._viewport(0, 0, rw, rh);
+                }
             }
         }
 
         @Inject(method = "render", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/render/GameRenderer;renderWorld(Lnet/minecraft/client/render/RenderTickCounter;)V"))
         private void beforeWorldRender(RenderTickCounter d, boolean t, CallbackInfo ci) {
-            if (ViewportController.INSTANCE.isActive()) {
-                ViewportController.INSTANCE.setWindowMetricsOverridden(true);
+            if (pge$useViewportMetrics()) {
                 ViewportController.INSTANCE.apply(MinecraftClient.getInstance().getWindow());
             }
         }
 
         @Inject(method = "render", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/render/GameRenderer;renderWorld(Lnet/minecraft/client/render/RenderTickCounter;)V", shift = At.Shift.AFTER))
         private void fixWorldViewport(RenderTickCounter d, boolean t, CallbackInfo ci) {
-            if (ViewportController.INSTANCE.isActive()) {
+            if (pge$useViewportMetrics()) {
                 ViewportController.INSTANCE.apply(MinecraftClient.getInstance().getWindow());
             }
         }
 
         @Inject(method = "render", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/gui/hud/InGameHud;render(Lnet/minecraft/client/gui/DrawContext;Lnet/minecraft/client/render/RenderTickCounter;)V"))
         private void beforeHud(RenderTickCounter d, boolean t, CallbackInfo ci) {
-            if (ViewportController.INSTANCE.isActive()) {
-                ViewportController.INSTANCE.setWindowMetricsOverridden(true);
+            if (pge$useViewportMetrics()) {
                 ViewportController.INSTANCE.apply(MinecraftClient.getInstance().getWindow());
             }
         }

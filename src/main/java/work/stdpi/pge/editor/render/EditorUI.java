@@ -2,23 +2,23 @@ package work.stdpi.pge.editor.render;
 
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.DrawContext;
-import net.minecraft.client.texture.NativeImageBackedTexture;
-import net.minecraft.util.Identifier;
 import org.lwjgl.glfw.GLFW;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import work.stdpi.pge.editor.logic.EditorManager;
 import work.stdpi.pge.editor.logic.ViewportController;
-import work.stdpi.pge.editor.logic.InputDispatcher;
 import work.stdpi.pge.editor.WindowAccessor;
 
 public class EditorUI {
     public static final EditorUI INSTANCE = new EditorUI();
-    private static final Identifier TERM_TEXTURE_ID = Identifier.of("pge-editor", "term");
+    private static final Logger LOGGER = LoggerFactory.getLogger("pge-editor/ui");
     private final TerminalRenderer term = new TerminalRenderer();
-    private boolean init = false;
+    private final GlyphGridRenderer glyphGrid = new GlyphGridRenderer();
+    private final MiniGameRenderer miniGame = new MiniGameRenderer();
+    private boolean regionLogged = false;
     private boolean focused = false;
     private boolean windowFocused = true;
     private int ex, ey, ew, eh;
-    private NativeImageBackedTexture registeredTexture;
 
     public void render(DrawContext context) {
         if (!EditorManager.INSTANCE.isEnabled()) return;
@@ -43,8 +43,20 @@ public class EditorUI {
 
         if (ew <= 0 || eh <= 0) return;
 
+        if (!regionLogged) {
+            LOGGER.info(
+                "editor region side={} editor=({}, {}) {}x{} viewport=({}, {}) {}x{} screen={}x{}",
+                EditorManager.INSTANCE.getSide(),
+                ex, ey, ew, eh,
+                gx, gy, gw, gh,
+                rsw, rsh
+            );
+            regionLogged = true;
+        }
+
         boolean nowWindowFocused = GLFW.glfwGetWindowAttrib(win.getHandle(), GLFW.GLFW_FOCUSED) == GLFW.GLFW_TRUE;
         if (nowWindowFocused && !windowFocused && focused) {
+            LOGGER.info("minecraft window focus restored while terminal focused");
             term.focus();
         }
         windowFocused = nowWindowFocused;
@@ -55,19 +67,14 @@ public class EditorUI {
         context.getMatrices().pushMatrix();
         context.getMatrices().scale(liedScaleX, liedScaleY);
         
-        // 1. Fill background
         context.fill(ex, ey, ex + ew, ey + eh, 0xFF1E1E1E);
 
-        if (!init) { term.init(ew, eh); init = true; } else { term.resize(ew, eh); }
-        term.update();
-
-        var tex = term.getTexture();
-        if (tex != null) {
-            if (registeredTexture != tex) {
-                mc.getTextureManager().registerTexture(TERM_TEXTURE_ID, tex);
-                registeredTexture = tex;
-            }
-            context.drawTexturedQuad(TERM_TEXTURE_ID, ex, ex + ew, ey, ey + eh, 0f, 1f, 0f, 1f);
+        if (EditorManager.INSTANCE.getRenderMode() == EditorManager.RenderMode.TERMINAL) {
+            term.render(context, ex, ey, ew, eh);
+        } else if (EditorManager.INSTANCE.getRenderMode() == EditorManager.RenderMode.GIZMO_GRID) {
+            glyphGrid.render(context, ex, ey, ew, eh);
+        } else {
+            miniGame.render(context, ex, ey, ew, eh);
         }
 
         context.getMatrices().popMatrix();
@@ -82,9 +89,19 @@ public class EditorUI {
         
         if (mx >= ex && mx < ex + ew && my >= ey && my < ey + eh) {
             focused = true;
-            term.focus();
-            InputDispatcher.dispatchMouse(term.getInputTarget(), mx - ex, my - ey, b, a, m);
+            if (EditorManager.INSTANCE.getRenderMode() == EditorManager.RenderMode.TERMINAL) {
+                LOGGER.info("terminal mouse focus acquired at {},{}", mx - ex, my - ey);
+                term.focus();
+                term.onMouse(mx - ex, my - ey, b, a, m, ew, eh);
+            } else if (EditorManager.INSTANCE.getRenderMode() == EditorManager.RenderMode.GIZMO_GRID) {
+                glyphGrid.onMouse(mx - ex, my - ey, b, a, m, ew, eh);
+            } else {
+                miniGame.onMouse(mx - ex, my - ey, b, a, m, ew, eh);
+            }
             return true;
+        }
+        if (focused) {
+            LOGGER.info("terminal mouse focus lost");
         }
         focused = false;
         return false;
@@ -98,23 +115,46 @@ public class EditorUI {
         int mx = (int)(x / s);
         int my = (int)(y / s);
         if (mx >= ex && mx < ex + ew && my >= ey && my < ey + eh) {
-            InputDispatcher.dispatchMove(term.getInputTarget(), mx - ex, my - ey);
+            if (EditorManager.INSTANCE.getRenderMode() == EditorManager.RenderMode.TERMINAL) {
+                term.onMove(mx - ex, my - ey, ew, eh);
+            } else if (EditorManager.INSTANCE.getRenderMode() == EditorManager.RenderMode.GIZMO_GRID) {
+                glyphGrid.onMove(mx - ex, my - ey, ew, eh);
+            } else {
+                miniGame.onMove(mx - ex, my - ey, ew, eh);
+            }
         }
     }
 
     public boolean onKey(int k, int a, int m) {
         if (!EditorManager.INSTANCE.isEnabled()) return false;
         if (k == GLFW.GLFW_KEY_BACKSLASH) return false;
-        if (focused) {
-            InputDispatcher.dispatchKey(term.getInputTarget(), k, a, m);
-            return true;
+        boolean terminalGameplayCapture =
+            EditorManager.INSTANCE.getRenderMode() == EditorManager.RenderMode.TERMINAL
+                && MinecraftClient.getInstance().currentScreen == null;
+        if (focused || terminalGameplayCapture) {
+            if (EditorManager.INSTANCE.getRenderMode() == EditorManager.RenderMode.TERMINAL) {
+                LOGGER.info("terminal key key={} action={} mods={}", k, a, m);
+                term.onKey(k, a, m);
+                return true;
+            } else if (EditorManager.INSTANCE.getRenderMode() == EditorManager.RenderMode.GIZMO_GRID) {
+                return glyphGrid.onKey(k, a);
+            } else {
+                return miniGame.onKey(k, a);
+            }
         }
         return false;
     }
 
     public boolean onChar(int c) {
-        if (EditorManager.INSTANCE.isEnabled() && focused) {
-            InputDispatcher.dispatchChar(term.getInputTarget(), c);
+        boolean terminalGameplayCapture =
+            EditorManager.INSTANCE.isEnabled()
+                && EditorManager.INSTANCE.getRenderMode() == EditorManager.RenderMode.TERMINAL
+                && MinecraftClient.getInstance().currentScreen == null;
+        if (EditorManager.INSTANCE.isEnabled()
+            && EditorManager.INSTANCE.getRenderMode() == EditorManager.RenderMode.TERMINAL
+            && (focused || terminalGameplayCapture)) {
+            LOGGER.info("terminal char codepoint={}", c);
+            term.onChar(c);
             return true;
         }
         return false;

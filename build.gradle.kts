@@ -13,6 +13,10 @@ base {
 repositories {
     mavenCentral()
     maven { url = uri("https://packages.jetbrains.team/maven/p/ij/intellij-dependencies") }
+    maven {
+        name = "Terraformers"
+        url = uri("https://maven.terraformersmc.com/")
+    }
 }
 
 dependencies {
@@ -20,6 +24,8 @@ dependencies {
     mappings("net.fabricmc:yarn:${project.property("yarn_mappings")}:v2")
     modImplementation("net.fabricmc:fabric-loader:${project.property("loader_version")}")
     modImplementation("net.fabricmc.fabric-api:fabric-api:0.103.0+1.21.1")
+    modCompileOnly("com.terraformersmc:modmenu:11.0.1")
+    modLocalRuntime("com.terraformersmc:modmenu:11.0.1")
 
     // JediTerm & PTY support - Using standard Fabric 'include'
     // We must include all transitive dependencies manually

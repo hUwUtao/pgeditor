@@ -17,6 +17,9 @@
   "entrypoints": {
     "client": [
       "work.stdpi.pge.editor.EditorClient"
+    ],
+    "modmenu": [
+      "work.stdpi.pge.editor.modmenu.PgeModMenuIntegration"
     ]
   },
   "mixins": [
