@@ -26,6 +26,7 @@ import com.jediterm.terminal.emulator.mouse.MouseMode;
 import com.jediterm.terminal.model.JediTerminal;
 import com.jediterm.terminal.model.StyleState;
 import com.jediterm.terminal.model.TerminalTextBuffer;
+import com.jediterm.terminal.model.TextBufferChangesListener;
 import com.jediterm.terminal.model.TerminalTypeAheadSettings;
 import com.jediterm.terminal.ui.JediTermExecutorServiceManager;
 import com.pty4j.PtyProcess;
@@ -41,7 +42,10 @@ import work.stdpi.pge.editor.logic.EditorManager;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.BitSet;
 import java.util.HashMap;
+import java.util.List;
 
 import static com.jediterm.terminal.TextStyle.Option.BOLD;
 import static com.jediterm.terminal.TextStyle.Option.HIDDEN;
@@ -74,6 +78,10 @@ public class TerminalRenderer {
     private int activeMouseButton = MouseButtonCodes.NONE;
     private boolean pendingTerminalRefresh;
     private boolean initialized;
+    private final Object rowCacheLock = new Object();
+    private RowPlan[] rowPlans = new RowPlan[0];
+    private final BitSet dirtyRows = new BitSet();
+    private boolean allRowsDirty = true;
 
     public void render(DrawContext context, int x, int y, int width, int height) {
         syncAtlasSettings();
@@ -85,17 +93,20 @@ public class TerminalRenderer {
             return;
         }
 
+        int cellWidth = atlas.getCellWidth();
+        int cellHeight = atlas.getCellHeight();
         textBuffer.lock();
         try {
-            int cellWidth = atlas.getCellWidth();
-            int cellHeight = atlas.getCellHeight();
-            for (int row = 0; row < rows; row++) {
-                drawRow(context, x, y, row, cellWidth, cellHeight);
-            }
-            drawCursor(context, x, y, cellWidth, cellHeight);
+            rebuildDirtyRowPlans();
         } finally {
             textBuffer.unlock();
         }
+
+        RowPlan[] plans = rowPlans;
+        for (int row = 0; row < Math.min(rows, plans.length); row++) {
+            drawRowPlan(context, x, y, row, plans[row], cellWidth, cellHeight);
+        }
+        drawCursor(context, x, y, cellWidth, cellHeight);
     }
 
     public boolean onMouse(int localX, int localY, int button, int action, int mods, int width, int height) {
@@ -147,7 +158,7 @@ public class TerminalRenderer {
         int col = clamp((localX - PADDING_X) / atlas.getCellWidth(), 0, Math.max(0, columns - 1));
         int row = clamp((localY - PADDING_Y) / atlas.getCellHeight(), 0, Math.max(0, rows - 1));
         int modifiers = toMouseModifiers(mods);
-        int wheelButton = verticalAmount > 0.0 ? MouseButtonCodes.SCROLLUP : MouseButtonCodes.SCROLLDOWN;
+        int wheelButton = verticalAmount > 0.0 ? MouseButtonCodes.SCROLLDOWN : MouseButtonCodes.SCROLLUP;
         terminal.mouseWheelMoved(col, row, new MouseWheelEvent(wheelButton, modifiers));
         return true;
     }
@@ -234,6 +245,28 @@ public class TerminalRenderer {
         ));
 
         textBuffer = new TerminalTextBuffer(columns, rows, styleState);
+        rowPlans = new RowPlan[rows];
+        markAllRowsDirty();
+        textBuffer.addChangesListener(new TextBufferChangesListener() {
+            @Override
+            public void linesChanged(int fromLine) {
+                markRowsDirty(Math.max(0, fromLine), rows);
+            }
+
+            @Override
+            public void linesDiscardedFromHistory(@NotNull List<com.jediterm.terminal.model.TerminalLine> lines) {
+            }
+
+            @Override
+            public void historyCleared() {
+                markAllRowsDirty();
+            }
+
+            @Override
+            public void widthResized() {
+                markAllRowsDirty();
+            }
+        });
         terminal = new JediTerminal(display, textBuffer, styleState);
         executorServiceManager = new JediTermExecutorServiceManager();
 
@@ -285,6 +318,8 @@ public class TerminalRenderer {
         pixelHeight = height;
         columns = newColumns;
         rows = newRows;
+        rowPlans = new RowPlan[rows];
+        markAllRowsDirty();
         starter.postResize(new TermSize(columns, rows), RequestOrigin.User);
         pendingTerminalRefresh = false;
         LOGGER.info("resized native terminal to {}x{} cells for {}x{} px", columns, rows, width, height);
@@ -316,11 +351,21 @@ public class TerminalRenderer {
         return new String[]{"/bin/bash", "--login"};
     }
 
-    private void drawRow(DrawContext context, int x, int y, int row, int cellWidth, int cellHeight) {
+    private void drawRowPlan(DrawContext context, int x, int y, int row, @Nullable RowPlan rowPlan, int cellWidth, int cellHeight) {
+        if (rowPlan == null) {
+            return;
+        }
+        for (RunPlan run : rowPlan.runs()) {
+            drawRun(context, x, y, row, run.startCol(), run.text(), run.foreground(), run.background(), cellWidth, cellHeight);
+        }
+    }
+
+    private RowPlan buildRowPlan(int row) {
         int startCol = 0;
         int runForeground = DEFAULT_FG;
         int runBackground = DEFAULT_BG;
         StringBuilder builder = new StringBuilder(columns);
+        List<RunPlan> runs = new ArrayList<>();
 
         for (int col = 0; col < columns; col++) {
             char ch = normalizeGlyph(textBuffer.getCharAt(col, row));
@@ -331,7 +376,7 @@ public class TerminalRenderer {
                 runForeground = style.foreground();
                 runBackground = style.background();
             } else if (runForeground != style.foreground() || runBackground != style.background()) {
-                drawRun(context, x, y, row, startCol, builder.toString(), runForeground, runBackground, cellWidth, cellHeight);
+                runs.add(new RunPlan(startCol, builder.toString(), runForeground, runBackground));
                 builder.setLength(0);
                 startCol = col;
                 runForeground = style.foreground();
@@ -342,8 +387,9 @@ public class TerminalRenderer {
         }
 
         if (!builder.isEmpty()) {
-            drawRun(context, x, y, row, startCol, builder.toString(), runForeground, runBackground, cellWidth, cellHeight);
+            runs.add(new RunPlan(startCol, builder.toString(), runForeground, runBackground));
         }
+        return new RowPlan(runs);
     }
 
     private void drawRun(DrawContext context, int x, int y, int row, int startCol, String text, int foreground, int background, int cellWidth, int cellHeight) {
@@ -523,7 +569,51 @@ public class TerminalRenderer {
         return Math.max(min, Math.min(max, value));
     }
 
+    private void rebuildDirtyRowPlans() {
+        if (rowPlans.length != rows) {
+            rowPlans = new RowPlan[rows];
+            markAllRowsDirty();
+        }
+
+        BitSet dirtySnapshot;
+        synchronized (rowCacheLock) {
+            if (allRowsDirty) {
+                dirtySnapshot = new BitSet(rows);
+                dirtySnapshot.set(0, rows);
+                allRowsDirty = false;
+                dirtyRows.clear();
+            } else if (dirtyRows.isEmpty()) {
+                return;
+            } else {
+                dirtySnapshot = (BitSet) dirtyRows.clone();
+                dirtyRows.clear();
+            }
+        }
+
+        for (int row = dirtySnapshot.nextSetBit(0); row >= 0; row = dirtySnapshot.nextSetBit(row + 1)) {
+            if (row >= rows) {
+                break;
+            }
+            rowPlans[row] = buildRowPlan(row);
+        }
+    }
+
+    private void markRowsDirty(int fromInclusive, int toExclusive) {
+        synchronized (rowCacheLock) {
+            dirtyRows.set(Math.max(0, fromInclusive), Math.max(Math.max(0, fromInclusive), toExclusive));
+        }
+    }
+
+    private void markAllRowsDirty() {
+        synchronized (rowCacheLock) {
+            allRowsDirty = true;
+            dirtyRows.clear();
+        }
+    }
+
     private record CellStyle(int foreground, int background) {}
+    private record RunPlan(int startCol, String text, int foreground, int background) {}
+    private record RowPlan(List<RunPlan> runs) {}
 
     private static final class NativeDisplay implements TerminalDisplay {
         private int cursorX;
