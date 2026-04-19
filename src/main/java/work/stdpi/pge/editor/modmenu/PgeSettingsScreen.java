@@ -20,17 +20,20 @@ public class PgeSettingsScreen extends Screen {
     @Override
     protected void init() {
         int centerX = this.width / 2;
-        int top = this.height / 2 - 34;
+        int top = this.height / 2 - 46;
 
         this.addDrawableChild(
             new FontWeightSlider(centerX - 100, top, 200, 20)
         );
         this.addDrawableChild(
-            new GlyphWidthSlider(centerX - 100, top + 24, 200, 20)
+            new SupersampleSlider(centerX - 100, top + 24, 200, 20)
+        );
+        this.addDrawableChild(
+            new GlyphWidthSlider(centerX - 100, top + 48, 200, 20)
         );
         this.addDrawableChild(
             ButtonWidget.builder(Text.literal("Done"), button -> close())
-                .dimensions(centerX - 100, top + 52, 200, 20)
+                .dimensions(centerX - 100, top + 76, 200, 20)
                 .build()
         );
     }
@@ -57,7 +60,7 @@ public class PgeSettingsScreen extends Screen {
                 "Embedded Intel One Mono with persistent terminal tuning."
             ),
             this.width / 2,
-            this.height / 2 - 34,
+            this.height / 2 - 46,
             0xA0A0A0
         );
     }
@@ -152,6 +155,43 @@ public class PgeSettingsScreen extends Screen {
             return (
                 (double) (width - MIN_WIDTH) / (double) (MAX_WIDTH - MIN_WIDTH)
             );
+        }
+    }
+
+    private static final class SupersampleSlider extends SliderWidget {
+
+        private SupersampleSlider(int x, int y, int width, int height) {
+            super(
+                x,
+                y,
+                width,
+                height,
+                Text.empty(),
+                toValue(EditorManager.INSTANCE.getTerminalSupersample())
+            );
+            updateMessage();
+        }
+
+        @Override
+        protected void updateMessage() {
+            EditorManager.TerminalSupersample supersample = getSupersample();
+            this.setMessage(Text.literal("Supersample: " + supersample.getValue() + "x"));
+        }
+
+        @Override
+        protected void applyValue() {
+            EditorManager.INSTANCE.setTerminalSupersample(getSupersample());
+        }
+
+        private EditorManager.TerminalSupersample getSupersample() {
+            EditorManager.TerminalSupersample[] values = EditorManager.TerminalSupersample.values();
+            int index = (int) Math.round(this.value * (values.length - 1));
+            return values[Math.max(0, Math.min(values.length - 1, index))];
+        }
+
+        private static double toValue(EditorManager.TerminalSupersample supersample) {
+            EditorManager.TerminalSupersample[] values = EditorManager.TerminalSupersample.values();
+            return (double) supersample.ordinal() / (double) (values.length - 1);
         }
     }
 

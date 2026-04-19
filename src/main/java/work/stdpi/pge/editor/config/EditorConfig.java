@@ -54,7 +54,8 @@ public final class EditorConfig {
         String renderMode,
         float dockPercent,
         int terminalCellWidthPx,
-        String terminalFontWeight
+        String terminalFontWeight,
+        String terminalSupersample
     ) {
         public Data() {
             this(
@@ -62,7 +63,8 @@ public final class EditorConfig {
                 EditorManager.RenderMode.TERMINAL.name(),
                 0.52f,
                 20,
-                EditorManager.TerminalFontWeight.REGULAR.name()
+                EditorManager.TerminalFontWeight.REGULAR.name(),
+                EditorManager.TerminalSupersample.X8.name()
             );
         }
     }

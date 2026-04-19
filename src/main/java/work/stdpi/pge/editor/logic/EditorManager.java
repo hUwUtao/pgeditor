@@ -14,12 +14,26 @@ public class EditorManager {
     public enum DockSide { LEFT, TOP, RIGHT, BOTTOM }
     public enum RenderMode { TERMINAL, GIZMO_GRID, MINIGAME }
     public enum TerminalFontWeight { LIGHT, REGULAR, MEDIUM, BOLD }
+    public enum TerminalSupersample {
+        X2(2), X4(4), X8(8), X12(12);
+
+        private final int value;
+
+        TerminalSupersample(int value) {
+            this.value = value;
+        }
+
+        public int getValue() {
+            return value;
+        }
+    }
 
     private DockSide side = DockSide.RIGHT;
     private RenderMode renderMode = RenderMode.TERMINAL;
     private float percent = 0.52f;
     private int terminalCellWidthPx = 20;
     private TerminalFontWeight terminalFontWeight = TerminalFontWeight.REGULAR;
+    private TerminalSupersample terminalSupersample = TerminalSupersample.X8;
     private boolean enabled = false;
     private KeyBinding toggleKey;
     private boolean configLoaded;
@@ -107,6 +121,13 @@ public class EditorManager {
         terminalFontWeight = fontWeight != null ? fontWeight : TerminalFontWeight.REGULAR;
         saveConfig();
     }
+    public TerminalSupersample getTerminalSupersample() {
+        return terminalSupersample;
+    }
+    public void setTerminalSupersample(TerminalSupersample supersample) {
+        terminalSupersample = supersample != null ? supersample : TerminalSupersample.X8;
+        saveConfig();
+    }
 
     private void loadConfig() {
         EditorConfig.Data data = EditorConfig.INSTANCE.load();
@@ -115,6 +136,7 @@ public class EditorManager {
         percent = Math.max(0.2f, Math.min(0.8f, data.dockPercent()));
         terminalCellWidthPx = Math.max(1, Math.min(24, data.terminalCellWidthPx()));
         terminalFontWeight = parseEnum(data.terminalFontWeight(), TerminalFontWeight.REGULAR);
+        terminalSupersample = parseEnum(data.terminalSupersample(), TerminalSupersample.X8);
         configLoaded = true;
     }
 
@@ -127,7 +149,8 @@ public class EditorManager {
             renderMode.name(),
             percent,
             terminalCellWidthPx,
-            terminalFontWeight.name()
+            terminalFontWeight.name(),
+            terminalSupersample.name()
         ));
     }
 

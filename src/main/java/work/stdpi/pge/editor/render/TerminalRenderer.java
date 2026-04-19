@@ -235,11 +235,13 @@ public class TerminalRenderer {
         if (requestedFontWeight != appliedFontWeight) {
             atlas.setFontWeight(requestedFontWeight);
             appliedFontWeight = requestedFontWeight;
+            pendingTerminalRefresh = initialized;
         }
         EditorManager.TerminalSupersample requestedSupersample = EditorManager.INSTANCE.getTerminalSupersample();
         if (requestedSupersample != appliedSupersample) {
             atlas.setSupersample(requestedSupersample.getValue());
             appliedSupersample = requestedSupersample;
+            pendingTerminalRefresh = initialized;
         }
     }
 

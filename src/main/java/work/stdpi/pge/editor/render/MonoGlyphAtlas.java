@@ -22,7 +22,6 @@ import java.util.HashMap;
 import java.util.Map;
 
 public class MonoGlyphAtlas {
-    private static final int SUPERSAMPLE = 4;
     private static final float CELL_HEIGHT_RATIO = 1.9f;
     private static final String GLYPHS =
         " " +
@@ -46,6 +45,7 @@ public class MonoGlyphAtlas {
     private final Map<Integer, ColoredTexture> coloredTextures = new HashMap<>();
     private int cellWidthPx = 4;
     private EditorManager.TerminalFontWeight fontWeight = EditorManager.TerminalFontWeight.REGULAR;
+    private int supersample = 8;
     private int cellHeightPx;
     private int rasterCellWidth;
     private int rasterCellHeight;
@@ -70,10 +70,14 @@ public class MonoGlyphAtlas {
         Graphics2D graphics = rasterMask.createGraphics();
         graphics.setFont(font);
         graphics.setColor(Color.WHITE);
-        graphics.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+        graphics.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_LCD_HRGB);
+        graphics.setRenderingHint(RenderingHints.KEY_TEXT_LCD_CONTRAST, 140);
         graphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
         graphics.setRenderingHint(RenderingHints.KEY_FRACTIONALMETRICS, RenderingHints.VALUE_FRACTIONALMETRICS_ON);
         graphics.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+        graphics.setRenderingHint(RenderingHints.KEY_ALPHA_INTERPOLATION, RenderingHints.VALUE_ALPHA_INTERPOLATION_QUALITY);
+        graphics.setRenderingHint(RenderingHints.KEY_COLOR_RENDERING, RenderingHints.VALUE_COLOR_RENDER_QUALITY);
+        graphics.setRenderingHint(RenderingHints.KEY_STROKE_CONTROL, RenderingHints.VALUE_STROKE_PURE);
 
         FontMetrics metrics = graphics.getFontMetrics();
         int rasterBaseline = centerBaseline(metrics);
@@ -98,6 +102,8 @@ public class MonoGlyphAtlas {
         downsample.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC);
         downsample.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
         downsample.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+        downsample.setRenderingHint(RenderingHints.KEY_ALPHA_INTERPOLATION, RenderingHints.VALUE_ALPHA_INTERPOLATION_QUALITY);
+        downsample.setRenderingHint(RenderingHints.KEY_COLOR_RENDERING, RenderingHints.VALUE_COLOR_RENDER_QUALITY);
         downsample.drawImage(rasterMask, 0, 0, textureWidth, textureHeight, null);
         downsample.dispose();
 
@@ -123,6 +129,15 @@ public class MonoGlyphAtlas {
             return;
         }
         this.fontWeight = target;
+        invalidate();
+    }
+
+    public void setSupersample(int supersample) {
+        int clamped = Math.max(1, Math.min(16, supersample));
+        if (this.supersample == clamped) {
+            return;
+        }
+        this.supersample = clamped;
         invalidate();
     }
 
@@ -311,15 +326,18 @@ public class MonoGlyphAtlas {
 
     private void updateCellMetrics() {
         cellHeightPx = Math.max(3, Math.round(cellWidthPx * CELL_HEIGHT_RATIO));
-        rasterCellWidth = cellWidthPx * SUPERSAMPLE;
-        rasterCellHeight = cellHeightPx * SUPERSAMPLE;
+        rasterCellWidth = cellWidthPx * supersample;
+        rasterCellHeight = cellHeightPx * supersample;
     }
 
     private Font chooseRasterFont() {
         BufferedImage probe = new BufferedImage(1, 1, BufferedImage.TYPE_INT_ARGB);
         Graphics2D graphics = probe.createGraphics();
-        graphics.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+        graphics.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_LCD_HRGB);
+        graphics.setRenderingHint(RenderingHints.KEY_TEXT_LCD_CONTRAST, 140);
         graphics.setRenderingHint(RenderingHints.KEY_FRACTIONALMETRICS, RenderingHints.VALUE_FRACTIONALMETRICS_ON);
+        graphics.setRenderingHint(RenderingHints.KEY_ALPHA_INTERPOLATION, RenderingHints.VALUE_ALPHA_INTERPOLATION_QUALITY);
+        graphics.setRenderingHint(RenderingHints.KEY_COLOR_RENDERING, RenderingHints.VALUE_COLOR_RENDER_QUALITY);
 
         int usableWidth = Math.max(1, rasterCellWidth - Math.max(1, rasterCellWidth / 10));
         int usableHeight = Math.max(1, rasterCellHeight - Math.max(1, rasterCellHeight / 12));
