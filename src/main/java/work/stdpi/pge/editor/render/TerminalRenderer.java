@@ -75,6 +75,7 @@ public class TerminalRenderer {
     private int rows;
     private int appliedCellWidthPx = -1;
     private EditorManager.TerminalFontWeight appliedFontWeight;
+    private EditorManager.TerminalSupersample appliedSupersample;
     private int activeMouseButton = MouseButtonCodes.NONE;
     private boolean pendingTerminalRefresh;
     private boolean initialized;
@@ -186,6 +187,15 @@ public class TerminalRenderer {
         int translatedKey = toTerminalKey(key);
         int translatedModifiers = toKeyModifiers(mods);
 
+        if (key == GLFW.GLFW_KEY_TAB) {
+            if ((mods & GLFW.GLFW_MOD_SHIFT) != 0) {
+                starter.sendBytes(new byte[]{27, '[', 'Z'}, true);
+            } else {
+                starter.sendBytes(new byte[]{'\t'}, true);
+            }
+            return true;
+        }
+
         if (translatedKey != -1) {
             byte[] bytes = terminal.getCodeForKey(translatedKey, translatedModifiers);
             if (bytes != null) {
@@ -225,6 +235,11 @@ public class TerminalRenderer {
         if (requestedFontWeight != appliedFontWeight) {
             atlas.setFontWeight(requestedFontWeight);
             appliedFontWeight = requestedFontWeight;
+        }
+        EditorManager.TerminalSupersample requestedSupersample = EditorManager.INSTANCE.getTerminalSupersample();
+        if (requestedSupersample != appliedSupersample) {
+            atlas.setSupersample(requestedSupersample.getValue());
+            appliedSupersample = requestedSupersample;
         }
     }
 
