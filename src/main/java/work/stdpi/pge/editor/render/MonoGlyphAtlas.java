@@ -29,7 +29,11 @@ public class MonoGlyphAtlas {
         "!\"#$%&'()*+,-./0123456789:;<=>?" +
         "@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_" +
         "`abcdefghijklmnopqrstuvwxyz{|}~" +
-        "─│┌┐└┘├┤┬┴┼";
+        "─│┌┐└┘├┤┬┴┼" +
+        "╭╮╰╯╴╵╶╷╸╹╺╻╼╽╾╿" +
+        "═║╔╗╚╝╠╣╦╩╬╞╡╥╨╪╟╢╤╧╫╋" +
+        "┏┓┗┛┠┨┯┷┿" +
+        "█▇▆▅▄▃▂▁▀▉▊▋▌▍▎▏░▒▓";
     private static final Map<EditorManager.TerminalFontWeight, String> FONT_RESOURCES = Map.of(
         EditorManager.TerminalFontWeight.LIGHT, "/assets/pge-editor/fonts/IntelOneMono-Light.ttf",
         EditorManager.TerminalFontWeight.REGULAR, "/assets/pge-editor/fonts/IntelOneMono-Regular.ttf",
@@ -127,8 +131,11 @@ public class MonoGlyphAtlas {
         ColoredTexture atlas = coloredTextures.computeIfAbsent(color, this::buildColoredTexture);
         for (int i = 0; i < text.length(); i++) {
             char ch = text.charAt(i);
-            Glyph glyph = glyphs.getOrDefault(ch, glyphs.get(' '));
             int drawX = x + i * cellWidthPx;
+            if (drawSpecialGlyph(context, ch, drawX, y, color)) {
+                continue;
+            }
+            Glyph glyph = glyphs.getOrDefault(ch, glyphs.get(' '));
             context.drawTexture(
                 RenderPipelines.GUI_TEXTURED,
                 atlas.id,
@@ -156,6 +163,129 @@ public class MonoGlyphAtlas {
 
     public int getBaselineOffset() {
         return 0;
+    }
+
+    private boolean drawSpecialGlyph(DrawContext context, char ch, int x, int y, int color) {
+        if (drawBoxGlyph(context, ch, x, y, color)) {
+            return true;
+        }
+        return drawBlockGlyph(context, ch, x, y, color);
+    }
+
+    private boolean drawBoxGlyph(DrawContext context, char ch, int x, int y, int color) {
+        boolean left;
+        boolean right;
+        boolean up;
+        boolean down;
+        int thickness = Math.max(1, Math.round(Math.min(cellWidthPx, cellHeightPx) / 6.0f));
+
+        switch (ch) {
+            case '─', '═', '╴', '╶' -> {
+                left = ch != '╶';
+                right = ch != '╴';
+                up = false;
+                down = false;
+            }
+            case '│', '║', '╵', '╷' -> {
+                left = false;
+                right = false;
+                up = ch != '╵';
+                down = ch != '╷';
+            }
+            case '┌', '╔', '╭', '┏' -> { left = false; right = true; up = false; down = true; }
+            case '┐', '╗', '╮', '┓' -> { left = true; right = false; up = false; down = true; }
+            case '└', '╚', '╰', '┗' -> { left = false; right = true; up = true; down = false; }
+            case '┘', '╝', '╯', '┛' -> { left = true; right = false; up = true; down = false; }
+            case '├', '╠', '┠', '╞', '╟' -> { left = false; right = true; up = true; down = true; }
+            case '┤', '╣', '┨', '╡', '╢' -> { left = true; right = false; up = true; down = true; }
+            case '┬', '╦', '┯', '╤', '╥' -> { left = true; right = true; up = false; down = true; }
+            case '┴', '╩', '┷', '╧', '╨' -> { left = true; right = true; up = true; down = false; }
+            case '┼', '╬', '┿', '╪', '╫', '╋', '╼', '╽', '╾', '╿' -> { left = true; right = true; up = true; down = true; }
+            case '╸', '╺' -> {
+                left = ch != '╺';
+                right = ch != '╸';
+                up = false;
+                down = false;
+                thickness = Math.max(thickness, 2);
+            }
+            case '╹', '╻' -> {
+                left = false;
+                right = false;
+                up = ch != '╹';
+                down = ch != '╻';
+                thickness = Math.max(thickness, 2);
+            }
+            default -> {
+                return false;
+            }
+        }
+
+        int centerX = x + cellWidthPx / 2;
+        int centerY = y + cellHeightPx / 2;
+        int half = Math.max(1, thickness / 2);
+
+        if (left || right) {
+            int lineY1 = centerY - half;
+            int lineY2 = lineY1 + thickness;
+            int lineX1 = left ? x : centerX - half;
+            int lineX2 = right ? x + cellWidthPx : centerX + half + 1;
+            context.fill(lineX1, lineY1, lineX2, lineY2, color);
+        }
+        if (up || down) {
+            int lineX1 = centerX - half;
+            int lineX2 = lineX1 + thickness;
+            int lineY1 = up ? y : centerY - half;
+            int lineY2 = down ? y + cellHeightPx : centerY + half + 1;
+            context.fill(lineX1, lineY1, lineX2, lineY2, color);
+        }
+        return true;
+    }
+
+    private boolean drawBlockGlyph(DrawContext context, char ch, int x, int y, int color) {
+        switch (ch) {
+            case '█' -> {
+                context.fill(x, y, x + cellWidthPx, y + cellHeightPx, color);
+                return true;
+            }
+            case '▀' -> {
+                context.fill(x, y, x + cellWidthPx, y + Math.max(1, cellHeightPx / 2), color);
+                return true;
+            }
+            case '▁', '▂', '▃', '▄', '▅', '▆', '▇' -> {
+                int level = "▁▂▃▄▅▆▇".indexOf(ch) + 1;
+                int blockHeight = Math.max(1, Math.round(cellHeightPx * (level / 8.0f)));
+                context.fill(x, y + cellHeightPx - blockHeight, x + cellWidthPx, y + cellHeightPx, color);
+                return true;
+            }
+            case '▉', '▊', '▋', '▌', '▍', '▎', '▏' -> {
+                int level = "▉▊▋▌▍▎▏".indexOf(ch);
+                float ratio = switch (level) {
+                    case 0 -> 7f / 8f;
+                    case 1 -> 3f / 4f;
+                    case 2 -> 5f / 8f;
+                    case 3 -> 1f / 2f;
+                    case 4 -> 3f / 8f;
+                    case 5 -> 1f / 4f;
+                    default -> 1f / 8f;
+                };
+                int blockWidth = Math.max(1, Math.round(cellWidthPx * ratio));
+                context.fill(x, y, x + blockWidth, y + cellHeightPx, color);
+                return true;
+            }
+            case '░', '▒', '▓' -> {
+                int alpha = switch (ch) {
+                    case '░' -> 0x55;
+                    case '▒' -> 0x99;
+                    default -> 0xCC;
+                };
+                int shaded = (color & 0x00FFFFFF) | (alpha << 24);
+                context.fill(x, y, x + cellWidthPx, y + cellHeightPx, shaded);
+                return true;
+            }
+            default -> {
+                return false;
+            }
+        }
     }
 
     private void updateCellMetrics() {

@@ -4,6 +4,7 @@ import com.jediterm.core.Color;
 import com.jediterm.core.input.InputEvent;
 import com.jediterm.core.input.KeyEvent;
 import com.jediterm.core.input.MouseEvent;
+import com.jediterm.core.input.MouseWheelEvent;
 import com.jediterm.core.typeahead.TerminalTypeAheadManager;
 import com.jediterm.core.typeahead.TypeAheadTerminalModel;
 import com.jediterm.core.util.TermSize;
@@ -135,6 +136,20 @@ public class TerminalRenderer {
         } else {
             terminal.mouseDragged(col, row, event);
         }
+    }
+
+    public boolean onScroll(int localX, int localY, double horizontalAmount, double verticalAmount, int mods, int width, int height) {
+        if (!initialized || verticalAmount == 0.0) {
+            return false;
+        }
+        resizeIfNeeded(width, height);
+
+        int col = clamp((localX - PADDING_X) / atlas.getCellWidth(), 0, Math.max(0, columns - 1));
+        int row = clamp((localY - PADDING_Y) / atlas.getCellHeight(), 0, Math.max(0, rows - 1));
+        int modifiers = toMouseModifiers(mods);
+        int wheelButton = verticalAmount > 0.0 ? MouseButtonCodes.SCROLLUP : MouseButtonCodes.SCROLLDOWN;
+        terminal.mouseWheelMoved(col, row, new MouseWheelEvent(wheelButton, modifiers));
+        return true;
     }
 
     public boolean onKey(int key, int action, int mods) {

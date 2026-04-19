@@ -6,10 +6,12 @@ import net.minecraft.client.render.GameRenderer;
 import net.minecraft.client.render.RenderTickCounter;
 import net.minecraft.client.gui.hud.InGameHud;
 import net.minecraft.client.gui.DrawContext;
+import org.joml.Matrix4f;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import work.stdpi.pge.editor.logic.ViewportController;
 import work.stdpi.pge.editor.render.EditorUI;
 import work.stdpi.pge.editor.WindowAccessor;
@@ -20,6 +22,23 @@ public class RenderMixin {
         private boolean pge$useViewportMetrics() {
             MinecraftClient client = MinecraftClient.getInstance();
             return ViewportController.INSTANCE.isActive() && client.currentScreen == null;
+        }
+
+        @Inject(method = "getBasicProjectionMatrix", at = @At("HEAD"), cancellable = true)
+        private void overrideProjectionMatrix(float fovDegrees, CallbackInfoReturnable<Matrix4f> cir) {
+            if (!pge$useViewportMetrics()) {
+                return;
+            }
+
+            float viewportWidth = Math.max(1, ViewportController.INSTANCE.getWidth());
+            float viewportHeight = Math.max(1, ViewportController.INSTANCE.getHeight());
+            Matrix4f projection = new Matrix4f().perspective(
+                fovDegrees * 0.017453292f,
+                viewportWidth / viewportHeight,
+                0.05f,
+                ((GameRenderer) (Object) this).getFarPlaneDistance()
+            );
+            cir.setReturnValue(projection);
         }
 
         @Inject(method = "render", at = @At("HEAD"))

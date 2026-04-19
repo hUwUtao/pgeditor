@@ -185,6 +185,31 @@ public class EditorUI {
         }
     }
 
+    public boolean onScroll(double horizontalAmount, double verticalAmount) {
+        if (!EditorManager.INSTANCE.isEnabled()) return false;
+        if (EditorManager.INSTANCE.getRenderMode() != EditorManager.RenderMode.TERMINAL) return false;
+
+        var mc = MinecraftClient.getInstance();
+        var win = mc.getWindow();
+        float framebufferScaleX = ((WindowAccessor)(Object)win).pge$getRealScaledWidth() > 0
+            ? (float) ((WindowAccessor)(Object)win).pge$getRealFramebufferWidth() / ((WindowAccessor)(Object)win).pge$getRealScaledWidth()
+            : 1.0f;
+        float framebufferScaleY = ((WindowAccessor)(Object)win).pge$getRealScaledHeight() > 0
+            ? (float) ((WindowAccessor)(Object)win).pge$getRealFramebufferHeight() / ((WindowAccessor)(Object)win).pge$getRealScaledHeight()
+            : 1.0f;
+        int exPx = Math.round(ex * framebufferScaleX);
+        int eyPx = Math.round(ey * framebufferScaleY);
+        int ewPx = Math.max(1, Math.round(ew * framebufferScaleX));
+        int ehPx = Math.max(1, Math.round(eh * framebufferScaleY));
+        int mx = (int) mc.mouse.getX();
+        int my = (int) mc.mouse.getY();
+
+        if (mx >= exPx && mx < exPx + ewPx && my >= eyPx && my < eyPx + ehPx) {
+            return term.onScroll(mx - exPx, my - eyPx, horizontalAmount, verticalAmount, 0, ewPx, ehPx);
+        }
+        return false;
+    }
+
     public boolean onKey(int k, int a, int m) {
         if (!EditorManager.INSTANCE.isEnabled()) return false;
         if (k == GLFW.GLFW_KEY_BACKSLASH) return false;

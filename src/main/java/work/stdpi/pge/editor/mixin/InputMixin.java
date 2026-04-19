@@ -41,6 +41,13 @@ public class InputMixin {
                 ci.cancel();
             }
         }
+
+        @Inject(method = "onMouseScroll", at = @At("HEAD"), cancellable = true)
+        private void onScroll(long win, double horizontalAmount, double verticalAmount, CallbackInfo ci) {
+            if (EditorUI.INSTANCE.onScroll(horizontalAmount, verticalAmount)) {
+                ci.cancel();
+            }
+        }
     }
 
     @Mixin(Keyboard.class)
