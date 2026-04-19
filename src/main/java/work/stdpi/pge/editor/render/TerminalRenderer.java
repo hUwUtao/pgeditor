@@ -27,7 +27,9 @@ import com.jediterm.terminal.model.StyleState;
 import com.jediterm.terminal.model.TerminalTextBuffer;
 import com.jediterm.terminal.model.TerminalTypeAheadSettings;
 import com.jediterm.terminal.ui.JediTermExecutorServiceManager;
+import com.pty4j.PtyProcess;
 import com.pty4j.PtyProcessBuilder;
+import com.pty4j.WinSize;
 import net.minecraft.client.gui.DrawContext;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -46,8 +48,8 @@ import static com.jediterm.terminal.TextStyle.Option.INVERSE;
 
 public class TerminalRenderer {
     private static final Logger LOGGER = LoggerFactory.getLogger("pge-editor/native-terminal");
-    private static final int PADDING_X = 2;
-    private static final int PADDING_Y = 2;
+    private static final int PADDING_X = 0;
+    private static final int PADDING_Y = 0;
     private static final int DEFAULT_BG = 0xFF0B0F14;
     private static final int DEFAULT_FG = 0xFFE6EDF3;
     private static final int CURSOR_ACCENT = 0xFF8AB4F8;
@@ -226,6 +228,14 @@ public class TerminalRenderer {
                 public String getName() {
                     return "PGE";
                 }
+
+                @Override
+                public void resize(@NotNull TermSize termSize) {
+                    Process ttyProcess = getProcess();
+                    if (ttyProcess instanceof PtyProcess ptyProcess) {
+                        ptyProcess.setWinSize(new WinSize(termSize.getColumns(), termSize.getRows()));
+                    }
+                }
             };
             process = connector.getProcess();
             NoOpTypeAheadModel typeAheadModel = new NoOpTypeAheadModel(terminal, textBuffer);
@@ -260,7 +270,6 @@ public class TerminalRenderer {
         pixelHeight = height;
         columns = newColumns;
         rows = newRows;
-        terminal.resize(new TermSize(columns, rows), RequestOrigin.User);
         starter.postResize(new TermSize(columns, rows), RequestOrigin.User);
         pendingTerminalRefresh = false;
         LOGGER.info("resized native terminal to {}x{} cells for {}x{} px", columns, rows, width, height);

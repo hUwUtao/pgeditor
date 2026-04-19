@@ -170,8 +170,8 @@ public class MonoGlyphAtlas {
         graphics.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
         graphics.setRenderingHint(RenderingHints.KEY_FRACTIONALMETRICS, RenderingHints.VALUE_FRACTIONALMETRICS_ON);
 
-        int usableWidth = Math.max(1, rasterCellWidth - Math.max(1, rasterCellWidth / 6));
-        int usableHeight = Math.max(1, rasterCellHeight - Math.max(1, rasterCellHeight / 6));
+        int usableWidth = Math.max(1, rasterCellWidth - Math.max(1, rasterCellWidth / 10));
+        int usableHeight = Math.max(1, rasterCellHeight - Math.max(1, rasterCellHeight / 12));
         Font base = getEmbeddedFont(fontWeight);
         Font best = base.deriveFont(1f);
 
