@@ -132,6 +132,9 @@ public class MonoGlyphAtlas {
         for (int i = 0; i < text.length(); i++) {
             char ch = text.charAt(i);
             int drawX = x + i * cellWidthPx;
+            if (ch == ' ') {
+                continue;
+            }
             if (drawSpecialGlyph(context, ch, drawX, y, color)) {
                 continue;
             }
