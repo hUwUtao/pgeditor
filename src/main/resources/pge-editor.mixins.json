@@ -5,6 +5,7 @@
   "compatibilityLevel": "JAVA_21",
   "mixins": [
     "WindowMixin",
+    "FramebufferMixin",
     "RenderMixin$GameRendererMixin",
     "RenderMixin$InGameHudMixin",
     "InputMixin$MouseMixin",

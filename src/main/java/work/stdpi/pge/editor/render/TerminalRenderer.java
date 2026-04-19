@@ -385,8 +385,8 @@ public class TerminalRenderer {
         List<RunPlan> runs = new ArrayList<>();
 
         for (int col = 0; col < columns; col++) {
-            char ch = normalizeGlyph(textBuffer.getCharAt(col, row));
-            CellStyle style = resolveStyle(textBuffer.getStyleAt(col, row));
+            char ch = getSafeCharAt(col, row);
+            CellStyle style = getSafeStyleAt(col, row);
 
             if (builder.isEmpty()) {
                 startCol = col;
@@ -442,13 +442,29 @@ public class TerminalRenderer {
             }
             case BLINK_UNDERLINE, STEADY_UNDERLINE -> context.fill(drawX, drawY + cellHeight - 2, drawX + cellWidth, drawY + cellHeight, CURSOR_ACCENT);
             case BLINK_BLOCK, STEADY_BLOCK -> {
-                char glyph = normalizeGlyph(textBuffer.getCharAt(cursorCol, cursorRow));
-                CellStyle style = resolveStyle(textBuffer.getStyleAt(cursorCol, cursorRow));
+                char glyph = getSafeCharAt(cursorCol, cursorRow);
+                CellStyle style = getSafeStyleAt(cursorCol, cursorRow);
                 context.fill(drawX, drawY, drawX + cellWidth, drawY + cellHeight, CURSOR_ACCENT);
                 if (glyph != ' ') {
                     atlas.drawText(context, String.valueOf(glyph), drawX, drawY, style.background());
                 }
             }
+        }
+    }
+
+    private char getSafeCharAt(int col, int row) {
+        try {
+            return normalizeGlyph(textBuffer.getCharAt(col, row));
+        } catch (RuntimeException ignored) {
+            return ' ';
+        }
+    }
+
+    private CellStyle getSafeStyleAt(int col, int row) {
+        try {
+            return resolveStyle(textBuffer.getStyleAt(col, row));
+        } catch (RuntimeException ignored) {
+            return new CellStyle(DEFAULT_FG, DEFAULT_BG);
         }
     }
 
