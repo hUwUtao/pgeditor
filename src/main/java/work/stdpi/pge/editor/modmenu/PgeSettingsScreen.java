@@ -22,13 +22,15 @@ public class PgeSettingsScreen extends Screen {
         int centerX = this.width / 2;
         int top = this.height / 2 - 34;
 
-        this.addDrawableChild(new GlyphSizeSlider(centerX - 100, top, 200, 20));
         this.addDrawableChild(
-            new GlyphRectScaleSlider(centerX - 100, top + 24, 200, 20)
+            new FontWeightSlider(centerX - 100, top, 200, 20)
+        );
+        this.addDrawableChild(
+            new GlyphWidthSlider(centerX - 100, top + 24, 200, 20)
         );
         this.addDrawableChild(
             ButtonWidget.builder(Text.literal("Done"), button -> close())
-                .dimensions(centerX - 100, top + 54, 200, 20)
+                .dimensions(centerX - 100, top + 52, 200, 20)
                 .build()
         );
     }
@@ -52,7 +54,7 @@ public class PgeSettingsScreen extends Screen {
         context.drawCenteredTextWithShadow(
             this.textRenderer,
             Text.literal(
-                "Tune terminal glyph size for the native Jedi renderer."
+                "Embedded Intel One Mono with persistent terminal tuning."
             ),
             this.width / 2,
             this.height / 2 - 34,
@@ -65,88 +67,92 @@ public class PgeSettingsScreen extends Screen {
         MinecraftClient.getInstance().setScreen(parent);
     }
 
-    private static final class GlyphSizeSlider extends SliderWidget {
+    private static final class FontWeightSlider extends SliderWidget {
 
-        private static final int MIN_SIZE = 1;
-        private static final int MAX_SIZE = 14;
-
-        private GlyphSizeSlider(int x, int y, int width, int height) {
+        private FontWeightSlider(int x, int y, int width, int height) {
             super(
                 x,
                 y,
                 width,
                 height,
                 Text.empty(),
-                toValue(EditorManager.INSTANCE.getTerminalFontSize())
+                toValue(EditorManager.INSTANCE.getTerminalFontWeight())
             );
             updateMessage();
         }
 
         @Override
         protected void updateMessage() {
-            int size = getGlyphSize();
-            this.setMessage(Text.literal("Terminal Glyph Size: " + size));
+            EditorManager.TerminalFontWeight weight = getFontWeight();
+            this.setMessage(Text.literal("Font Weight: " + formatWeight(weight)));
         }
 
         @Override
         protected void applyValue() {
-            int target = getGlyphSize();
-            int current = EditorManager.INSTANCE.getTerminalFontSize();
-            EditorManager.INSTANCE.adjustTerminalFontSize(target - current);
+            EditorManager.INSTANCE.setTerminalFontWeight(getFontWeight());
         }
 
-        private int getGlyphSize() {
-            return (
-                MIN_SIZE + (int) Math.round(this.value * (MAX_SIZE - MIN_SIZE))
-            );
+        private EditorManager.TerminalFontWeight getFontWeight() {
+            EditorManager.TerminalFontWeight[] weights = EditorManager.TerminalFontWeight.values();
+            int index = (int) Math.round(this.value * (weights.length - 1));
+            return weights[Math.max(0, Math.min(weights.length - 1, index))];
         }
 
-        private static double toValue(int size) {
-            return (double) (size - MIN_SIZE) / (double) (MAX_SIZE - MIN_SIZE);
+        private static double toValue(EditorManager.TerminalFontWeight weight) {
+            EditorManager.TerminalFontWeight[] weights = EditorManager.TerminalFontWeight.values();
+            return (double) weight.ordinal() / (double) (weights.length - 1);
+        }
+
+        private static String formatWeight(EditorManager.TerminalFontWeight weight) {
+            return switch (weight) {
+                case LIGHT -> "Light";
+                case REGULAR -> "Regular";
+                case MEDIUM -> "Medium";
+                case BOLD -> "Bold";
+            };
         }
     }
 
-    private static final class GlyphRectScaleSlider extends SliderWidget {
+    private static final class GlyphWidthSlider extends SliderWidget {
 
-        private static final int MIN_SCALE = 70;
-        private static final int MAX_SCALE = 130;
+        private static final int MIN_WIDTH = 1;
+        private static final int MAX_WIDTH = 24;
 
-        private GlyphRectScaleSlider(int x, int y, int width, int height) {
+        private GlyphWidthSlider(int x, int y, int width, int height) {
             super(
                 x,
                 y,
                 width,
                 height,
                 Text.empty(),
-                toValue(EditorManager.INSTANCE.getTerminalCellScalePercent())
+                toValue(EditorManager.INSTANCE.getTerminalCellWidthPx())
             );
             updateMessage();
         }
 
         @Override
         protected void updateMessage() {
-            int scale = getScalePercent();
-            this.setMessage(Text.literal("Glyph Rect Scale: " + scale + "%"));
+            int pixels = getWidthPixels();
+            this.setMessage(Text.literal("Terminal Zoom: " + pixels + " px cell width"));
         }
 
         @Override
         protected void applyValue() {
-            EditorManager.INSTANCE.setTerminalCellScalePercent(
-                getScalePercent()
+            EditorManager.INSTANCE.setTerminalCellWidthPx(getWidthPixels());
+        }
+
+        private int getWidthPixels() {
+            return (
+                MIN_WIDTH +
+                (int) Math.round(this.value * (MAX_WIDTH - MIN_WIDTH))
             );
         }
 
-        private int getScalePercent() {
+        private static double toValue(int width) {
             return (
-                MIN_SCALE +
-                (int) Math.round(this.value * (MAX_SCALE - MIN_SCALE))
-            );
-        }
-
-        private static double toValue(int scale) {
-            return (
-                (double) (scale - MIN_SCALE) / (double) (MAX_SCALE - MIN_SCALE)
+                (double) (width - MIN_WIDTH) / (double) (MAX_WIDTH - MIN_WIDTH)
             );
         }
     }
+
 }

@@ -66,9 +66,10 @@ public class TerminalRenderer {
     private int pixelHeight;
     private int columns;
     private int rows;
-    private int appliedFontSize = -1;
-    private int appliedCellScalePercent = -1;
+    private int appliedCellWidthPx = -1;
+    private EditorManager.TerminalFontWeight appliedFontWeight;
     private int activeMouseButton = MouseButtonCodes.NONE;
+    private boolean pendingTerminalRefresh;
     private boolean initialized;
 
     public void render(DrawContext context, int x, int y, int width, int height) {
@@ -141,13 +142,13 @@ public class TerminalRenderer {
 
         if ((mods & GLFW.GLFW_MOD_CONTROL) != 0) {
             if (key == GLFW.GLFW_KEY_EQUAL || key == GLFW.GLFW_KEY_KP_ADD) {
-                EditorManager.INSTANCE.adjustTerminalFontSize(1);
+                EditorManager.INSTANCE.adjustTerminalCellWidthPx(1);
                 syncAtlasSettings();
                 resizeIfNeeded(pixelWidth, pixelHeight);
                 return true;
             }
             if (key == GLFW.GLFW_KEY_MINUS || key == GLFW.GLFW_KEY_KP_SUBTRACT) {
-                EditorManager.INSTANCE.adjustTerminalFontSize(-1);
+                EditorManager.INSTANCE.adjustTerminalCellWidthPx(-1);
                 syncAtlasSettings();
                 resizeIfNeeded(pixelWidth, pixelHeight);
                 return true;
@@ -186,15 +187,16 @@ public class TerminalRenderer {
     }
 
     private void syncAtlasSettings() {
-        int requestedFontSize = EditorManager.INSTANCE.getTerminalFontSize();
-        if (requestedFontSize != appliedFontSize) {
-            atlas.setFontSize(requestedFontSize);
-            appliedFontSize = requestedFontSize;
+        int requestedCellWidth = EditorManager.INSTANCE.getTerminalCellWidthPx();
+        if (requestedCellWidth != appliedCellWidthPx) {
+            atlas.setCellWidthPx(requestedCellWidth);
+            appliedCellWidthPx = requestedCellWidth;
+            pendingTerminalRefresh = initialized;
         }
-        int requestedCellScale = EditorManager.INSTANCE.getTerminalCellScalePercent();
-        if (requestedCellScale != appliedCellScalePercent) {
-            atlas.setCellScalePercent(requestedCellScale);
-            appliedCellScalePercent = requestedCellScale;
+        EditorManager.TerminalFontWeight requestedFontWeight = EditorManager.INSTANCE.getTerminalFontWeight();
+        if (requestedFontWeight != appliedFontWeight) {
+            atlas.setFontWeight(requestedFontWeight);
+            appliedFontWeight = requestedFontWeight;
         }
     }
 
@@ -250,24 +252,26 @@ public class TerminalRenderer {
 
         int newColumns = fitColumns(width);
         int newRows = fitRows(height);
-        if (width == pixelWidth && height == pixelHeight && newColumns == columns && newRows == rows) {
+        if (width == pixelWidth && height == pixelHeight && newColumns == columns && newRows == rows && !pendingTerminalRefresh) {
             return;
         }
 
         pixelWidth = width;
         pixelHeight = height;
-        if (newColumns != columns || newRows != rows) {
-            columns = newColumns;
-            rows = newRows;
-            starter.postResize(new TermSize(columns, rows), RequestOrigin.User);
-            LOGGER.info("resized native terminal to {}x{} cells for {}x{} px", columns, rows, width, height);
-        }
+        columns = newColumns;
+        rows = newRows;
+        terminal.resize(new TermSize(columns, rows), RequestOrigin.User);
+        starter.postResize(new TermSize(columns, rows), RequestOrigin.User);
+        pendingTerminalRefresh = false;
+        LOGGER.info("resized native terminal to {}x{} cells for {}x{} px", columns, rows, width, height);
     }
 
     private PtyProcessBuilder createProcessBuilder(int columns, int rows) {
         var env = new HashMap<>(System.getenv());
-        env.putIfAbsent("TERM", "xterm-256color");
-        env.putIfAbsent("COLORTERM", "truecolor");
+        env.put("TERM", "xterm-256color");
+        env.put("COLORTERM", "truecolor");
+        env.put("TERM_PROGRAM", "pge-editor");
+        env.put("TERM_PROGRAM_VERSION", "dev");
 
         return new PtyProcessBuilder(buildShellCommand())
             .setDirectory(System.getProperty("user.home"))
@@ -320,7 +324,7 @@ public class TerminalRenderer {
 
     private void drawRun(DrawContext context, int x, int y, int row, int startCol, String text, int foreground, int background, int cellWidth, int cellHeight) {
         int drawX = x + PADDING_X + startCol * cellWidth;
-        int drawY = y + PADDING_Y + row * cellHeight + atlas.getBaselineOffset();
+        int drawY = y + PADDING_Y + row * cellHeight;
         context.fill(drawX, drawY, drawX + text.length() * cellWidth, drawY + cellHeight, background);
 
         int visibleLength = trimTrailingSpaces(text);
@@ -342,7 +346,7 @@ public class TerminalRenderer {
         int cursorCol = clamp(display.cursorX, 0, Math.max(0, columns - 1));
         int cursorRow = clamp(display.cursorY - 1, 0, Math.max(0, rows - 1));
         int drawX = x + PADDING_X + cursorCol * cellWidth;
-        int drawY = y + PADDING_Y + cursorRow * cellHeight + atlas.getBaselineOffset();
+        int drawY = y + PADDING_Y + cursorRow * cellHeight;
 
         switch (shape) {
             case BLINK_VERTICAL_BAR, STEADY_VERTICAL_BAR -> {

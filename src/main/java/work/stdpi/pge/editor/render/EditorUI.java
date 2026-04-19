@@ -27,6 +27,8 @@ public class EditorUI {
         
         int rsw = ((WindowAccessor) (Object) win).pge$getRealScaledWidth();
         int rsh = ((WindowAccessor) (Object) win).pge$getRealScaledHeight();
+        int rfw = ((WindowAccessor) (Object) win).pge$getRealFramebufferWidth();
+        int rfh = ((WindowAccessor) (Object) win).pge$getRealFramebufferHeight();
 
         // EDITOR zone
         int gx = ViewportController.INSTANCE.getX();
@@ -61,29 +63,69 @@ public class EditorUI {
         }
         windowFocused = nowWindowFocused;
 
-        float liedScaleX = (float) win.getScaledWidth() / rsw;
-        float liedScaleY = (float) win.getScaledHeight() / rsh;
-        
-        context.getMatrices().pushMatrix();
-        context.getMatrices().scale(liedScaleX, liedScaleY);
-        
-        context.fill(ex, ey, ex + ew, ey + eh, 0xFF1E1E1E);
-
         if (EditorManager.INSTANCE.getRenderMode() == EditorManager.RenderMode.TERMINAL) {
-            term.render(context, ex, ey, ew, eh);
-        } else if (EditorManager.INSTANCE.getRenderMode() == EditorManager.RenderMode.GIZMO_GRID) {
-            glyphGrid.render(context, ex, ey, ew, eh);
-        } else {
-            miniGame.render(context, ex, ey, ew, eh);
-        }
+            float framebufferScaleX = rsw > 0 ? (float) rfw / rsw : 1.0f;
+            float framebufferScaleY = rsh > 0 ? (float) rfh / rsh : 1.0f;
+            int exPx = Math.round(ex * framebufferScaleX);
+            int eyPx = Math.round(ey * framebufferScaleY);
+            int ewPx = Math.max(1, Math.round(ew * framebufferScaleX));
+            int ehPx = Math.max(1, Math.round(eh * framebufferScaleY));
 
-        context.getMatrices().popMatrix();
+            context.getMatrices().pushMatrix();
+            context.getMatrices().scale(1.0f / framebufferScaleX, 1.0f / framebufferScaleY);
+            context.fill(exPx, eyPx, exPx + ewPx, eyPx + ehPx, 0xFF1E1E1E);
+            term.render(context, exPx, eyPx, ewPx, ehPx);
+            context.getMatrices().popMatrix();
+        } else if (EditorManager.INSTANCE.getRenderMode() == EditorManager.RenderMode.GIZMO_GRID) {
+            float liedScaleX = (float) win.getScaledWidth() / rsw;
+            float liedScaleY = (float) win.getScaledHeight() / rsh;
+            context.getMatrices().pushMatrix();
+            context.getMatrices().scale(liedScaleX, liedScaleY);
+            context.fill(ex, ey, ex + ew, ey + eh, 0xFF1E1E1E);
+            glyphGrid.render(context, ex, ey, ew, eh);
+            context.getMatrices().popMatrix();
+        } else {
+            float liedScaleX = (float) win.getScaledWidth() / rsw;
+            float liedScaleY = (float) win.getScaledHeight() / rsh;
+            context.getMatrices().pushMatrix();
+            context.getMatrices().scale(liedScaleX, liedScaleY);
+            context.fill(ex, ey, ex + ew, ey + eh, 0xFF1E1E1E);
+            miniGame.render(context, ex, ey, ew, eh);
+            context.getMatrices().popMatrix();
+        }
     }
 
     public boolean onMouse(int b, int a, int m) {
         if (!EditorManager.INSTANCE.isEnabled()) return false;
         var mc = MinecraftClient.getInstance();
         var win = mc.getWindow();
+        if (EditorManager.INSTANCE.getRenderMode() == EditorManager.RenderMode.TERMINAL) {
+            float framebufferScaleX = ((WindowAccessor)(Object)win).pge$getRealScaledWidth() > 0
+                ? (float) ((WindowAccessor)(Object)win).pge$getRealFramebufferWidth() / ((WindowAccessor)(Object)win).pge$getRealScaledWidth()
+                : 1.0f;
+            float framebufferScaleY = ((WindowAccessor)(Object)win).pge$getRealScaledHeight() > 0
+                ? (float) ((WindowAccessor)(Object)win).pge$getRealFramebufferHeight() / ((WindowAccessor)(Object)win).pge$getRealScaledHeight()
+                : 1.0f;
+            int exPx = Math.round(ex * framebufferScaleX);
+            int eyPx = Math.round(ey * framebufferScaleY);
+            int ewPx = Math.max(1, Math.round(ew * framebufferScaleX));
+            int ehPx = Math.max(1, Math.round(eh * framebufferScaleY));
+            int mx = (int) mc.mouse.getX();
+            int my = (int) mc.mouse.getY();
+
+            if (mx >= exPx && mx < exPx + ewPx && my >= eyPx && my < eyPx + ehPx) {
+                focused = true;
+                LOGGER.info("terminal mouse focus acquired at {},{}", mx - exPx, my - eyPx);
+                term.focus();
+                term.onMouse(mx - exPx, my - eyPx, b, a, m, ewPx, ehPx);
+                return true;
+            }
+            if (focused) {
+                LOGGER.info("terminal mouse focus lost");
+            }
+            focused = false;
+            return false;
+        }
         double s = (double) ((WindowAccessor)(Object)win).pge$getRealFramebufferWidth() / ((WindowAccessor)(Object)win).pge$getRealScaledWidth();
         int mx = (int)(mc.mouse.getX() / s), my = (int)(mc.mouse.getY() / s);
         
@@ -111,6 +153,24 @@ public class EditorUI {
         if (!EditorManager.INSTANCE.isEnabled()) return;
         var mc = MinecraftClient.getInstance();
         var win = mc.getWindow();
+        if (EditorManager.INSTANCE.getRenderMode() == EditorManager.RenderMode.TERMINAL) {
+            float framebufferScaleX = ((WindowAccessor)(Object)win).pge$getRealScaledWidth() > 0
+                ? (float) ((WindowAccessor)(Object)win).pge$getRealFramebufferWidth() / ((WindowAccessor)(Object)win).pge$getRealScaledWidth()
+                : 1.0f;
+            float framebufferScaleY = ((WindowAccessor)(Object)win).pge$getRealScaledHeight() > 0
+                ? (float) ((WindowAccessor)(Object)win).pge$getRealFramebufferHeight() / ((WindowAccessor)(Object)win).pge$getRealScaledHeight()
+                : 1.0f;
+            int exPx = Math.round(ex * framebufferScaleX);
+            int eyPx = Math.round(ey * framebufferScaleY);
+            int ewPx = Math.max(1, Math.round(ew * framebufferScaleX));
+            int ehPx = Math.max(1, Math.round(eh * framebufferScaleY));
+            int mx = (int) x;
+            int my = (int) y;
+            if (mx >= exPx && mx < exPx + ewPx && my >= eyPx && my < eyPx + ehPx) {
+                term.onMove(mx - exPx, my - eyPx, ewPx, ehPx);
+            }
+            return;
+        }
         double s = (double) ((WindowAccessor)(Object)win).pge$getRealFramebufferWidth() / ((WindowAccessor)(Object)win).pge$getRealScaledWidth();
         int mx = (int)(x / s);
         int my = (int)(y / s);

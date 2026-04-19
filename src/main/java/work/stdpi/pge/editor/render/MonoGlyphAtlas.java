@@ -1,41 +1,52 @@
 package work.stdpi.pge.editor.render;
 
 import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gl.RenderPipelines;
+import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.texture.NativeImage;
 import net.minecraft.client.texture.NativeImageBackedTexture;
 import net.minecraft.util.Identifier;
+import work.stdpi.pge.editor.logic.EditorManager;
 
+import java.awt.FontFormatException;
 import java.awt.Color;
 import java.awt.Font;
 import java.awt.FontMetrics;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.Map;
 
 public class MonoGlyphAtlas {
-    private static final int SUPERSAMPLE = 2;
+    private static final int SUPERSAMPLE = 4;
+    private static final float CELL_HEIGHT_RATIO = 1.9f;
     private static final String GLYPHS =
         " " +
         "!\"#$%&'()*+,-./0123456789:;<=>?" +
         "@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_" +
         "`abcdefghijklmnopqrstuvwxyz{|}~" +
         "─│┌┐└┘├┤┬┴┼";
+    private static final Map<EditorManager.TerminalFontWeight, String> FONT_RESOURCES = Map.of(
+        EditorManager.TerminalFontWeight.LIGHT, "/assets/pge-editor/fonts/IntelOneMono-Light.ttf",
+        EditorManager.TerminalFontWeight.REGULAR, "/assets/pge-editor/fonts/IntelOneMono-Regular.ttf",
+        EditorManager.TerminalFontWeight.MEDIUM, "/assets/pge-editor/fonts/IntelOneMono-Medium.ttf",
+        EditorManager.TerminalFontWeight.BOLD, "/assets/pge-editor/fonts/IntelOneMono-Bold.ttf"
+    );
+    private static final Map<EditorManager.TerminalFontWeight, Font> EMBEDDED_FONTS = new EnumMap<>(EditorManager.TerminalFontWeight.class);
 
     private final Map<Character, Glyph> glyphs = new HashMap<>();
     private final Map<Integer, ColoredTexture> coloredTextures = new HashMap<>();
-    private int fontSize = 8;
-    private int cellScalePercent = 100;
-    private int logicalCellWidth;
-    private int logicalCellHeight;
+    private int cellWidthPx = 4;
+    private EditorManager.TerminalFontWeight fontWeight = EditorManager.TerminalFontWeight.REGULAR;
+    private int cellHeightPx;
+    private int rasterCellWidth;
+    private int rasterCellHeight;
     private int textureWidth;
     private int textureHeight;
-    private int cellWidth;
-    private int cellHeight;
-    private int baseline;
     private BufferedImage alphaMask;
 
     public void ensureReady() {
@@ -43,70 +54,72 @@ public class MonoGlyphAtlas {
             return;
         }
 
-        BufferedImage probe = new BufferedImage(1, 1, BufferedImage.TYPE_INT_ARGB);
-        Graphics2D probeGraphics = probe.createGraphics();
-        probeGraphics.setFont(getFont());
-        FontMetrics metrics = probeGraphics.getFontMetrics();
+        updateCellMetrics();
 
-        int maxWidth = 0;
-        for (int i = 0; i < GLYPHS.length(); i++) {
-            maxWidth = Math.max(maxWidth, metrics.charWidth(GLYPHS.charAt(i)));
-        }
-        cellWidth = maxWidth + 1;
-        cellHeight = metrics.getAscent() + metrics.getDescent() + 1;
-        updateLogicalCellDimensions();
-        baseline = metrics.getAscent();
-        probeGraphics.dispose();
-
+        Font font = chooseRasterFont();
         int columns = 16;
         int rows = (int) Math.ceil(GLYPHS.length() / (double) columns);
-        textureWidth = columns * cellWidth;
-        textureHeight = rows * cellHeight;
+        int rasterTextureWidth = columns * rasterCellWidth;
+        int rasterTextureHeight = rows * rasterCellHeight;
 
-        alphaMask = new BufferedImage(textureWidth, textureHeight, BufferedImage.TYPE_INT_ARGB);
-        Graphics2D graphics = alphaMask.createGraphics();
-        graphics.setFont(getFont());
-        graphics.setColor(new Color(255, 255, 255, 255));
+        BufferedImage rasterMask = new BufferedImage(rasterTextureWidth, rasterTextureHeight, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D graphics = rasterMask.createGraphics();
+        graphics.setFont(font);
+        graphics.setColor(Color.WHITE);
         graphics.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
         graphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
         graphics.setRenderingHint(RenderingHints.KEY_FRACTIONALMETRICS, RenderingHints.VALUE_FRACTIONALMETRICS_ON);
         graphics.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
 
-        FontMetrics drawMetrics = graphics.getFontMetrics();
+        FontMetrics metrics = graphics.getFontMetrics();
+        int rasterBaseline = centerBaseline(metrics);
         for (int i = 0; i < GLYPHS.length(); i++) {
             char ch = GLYPHS.charAt(i);
             int col = i % columns;
             int row = i / columns;
-            int cellX = col * cellWidth;
-            int cellY = row * cellHeight;
-            int charWidth = drawMetrics.charWidth(ch);
-            int drawX = cellX + Math.max(0, (cellWidth - charWidth) / 2);
-            int drawY = cellY + baseline;
+            int cellX = col * rasterCellWidth;
+            int cellY = row * rasterCellHeight;
+            int charWidth = metrics.charWidth(ch);
+            int drawX = cellX + Math.max(0, (rasterCellWidth - charWidth) / 2);
+            int drawY = cellY + rasterBaseline;
             graphics.drawString(String.valueOf(ch), drawX, drawY);
-            glyphs.put(ch, new Glyph(cellX, cellY));
         }
+
         graphics.dispose();
 
+        textureWidth = columns * cellWidthPx;
+        textureHeight = rows * cellHeightPx;
+        alphaMask = new BufferedImage(textureWidth, textureHeight, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D downsample = alphaMask.createGraphics();
+        downsample.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC);
+        downsample.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+        downsample.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+        downsample.drawImage(rasterMask, 0, 0, textureWidth, textureHeight, null);
+        downsample.dispose();
+
+        for (int i = 0; i < GLYPHS.length(); i++) {
+            int col = i % columns;
+            int row = i / columns;
+            glyphs.put(GLYPHS.charAt(i), new Glyph(col * cellWidthPx, row * cellHeightPx));
+        }
     }
 
-    public void setFontSize(int fontSize) {
-        int clamped = Math.max(6, Math.min(14, fontSize));
-        if (this.fontSize == clamped) {
+    public void setCellWidthPx(int cellWidthPx) {
+        int clamped = Math.max(1, Math.min(24, cellWidthPx));
+        if (this.cellWidthPx == clamped) {
             return;
         }
-        this.fontSize = clamped;
+        this.cellWidthPx = clamped;
         invalidate();
     }
 
-    public void setCellScalePercent(int cellScalePercent) {
-        int clamped = Math.max(70, Math.min(130, cellScalePercent));
-        if (this.cellScalePercent == clamped) {
+    public void setFontWeight(EditorManager.TerminalFontWeight fontWeight) {
+        EditorManager.TerminalFontWeight target = fontWeight != null ? fontWeight : EditorManager.TerminalFontWeight.REGULAR;
+        if (this.fontWeight == target) {
             return;
         }
-        this.cellScalePercent = clamped;
-        if (alphaMask != null) {
-            updateLogicalCellDimensions();
-        }
+        this.fontWeight = target;
+        invalidate();
     }
 
     public void drawText(DrawContext context, String text, int x, int y, int color) {
@@ -115,15 +128,16 @@ public class MonoGlyphAtlas {
         for (int i = 0; i < text.length(); i++) {
             char ch = text.charAt(i);
             Glyph glyph = glyphs.getOrDefault(ch, glyphs.get(' '));
+            int drawX = x + i * cellWidthPx;
             context.drawTexture(
                 RenderPipelines.GUI_TEXTURED,
                 atlas.id,
-                x + i * logicalCellWidth,
+                drawX,
                 y,
                 glyph.u,
                 glyph.v,
-                logicalCellWidth,
-                logicalCellHeight,
+                cellWidthPx,
+                cellHeightPx,
                 textureWidth,
                 textureHeight
             );
@@ -132,25 +146,76 @@ public class MonoGlyphAtlas {
 
     public int getCellWidth() {
         ensureReady();
-        return logicalCellWidth;
+        return cellWidthPx;
     }
 
     public int getCellHeight() {
         ensureReady();
-        return logicalCellHeight;
+        return cellHeightPx;
     }
 
     public int getBaselineOffset() {
         return 0;
     }
 
-    private Font getFont() {
-        return new Font(Font.MONOSPACED, Font.PLAIN, fontSize * SUPERSAMPLE);
+    private void updateCellMetrics() {
+        cellHeightPx = Math.max(3, Math.round(cellWidthPx * CELL_HEIGHT_RATIO));
+        rasterCellWidth = cellWidthPx * SUPERSAMPLE;
+        rasterCellHeight = cellHeightPx * SUPERSAMPLE;
     }
 
-    private void updateLogicalCellDimensions() {
-        logicalCellWidth = Math.max(1, Math.round(cellWidth * (cellScalePercent / 100.0f)));
-        logicalCellHeight = Math.max(1, Math.round(cellHeight * (cellScalePercent / 100.0f)));
+    private Font chooseRasterFont() {
+        BufferedImage probe = new BufferedImage(1, 1, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D graphics = probe.createGraphics();
+        graphics.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+        graphics.setRenderingHint(RenderingHints.KEY_FRACTIONALMETRICS, RenderingHints.VALUE_FRACTIONALMETRICS_ON);
+
+        int usableWidth = Math.max(1, rasterCellWidth - Math.max(1, rasterCellWidth / 6));
+        int usableHeight = Math.max(1, rasterCellHeight - Math.max(1, rasterCellHeight / 6));
+        Font base = getEmbeddedFont(fontWeight);
+        Font best = base.deriveFont(1f);
+
+        for (int size = 1; size <= rasterCellHeight * 2; size++) {
+            Font candidate = base.deriveFont((float) size);
+            graphics.setFont(candidate);
+            FontMetrics metrics = graphics.getFontMetrics();
+            if (maxGlyphWidth(metrics) <= usableWidth && metrics.getAscent() + metrics.getDescent() <= usableHeight) {
+                best = candidate;
+            } else {
+                break;
+            }
+        }
+
+        graphics.dispose();
+        return best;
+    }
+
+    private Font getEmbeddedFont(EditorManager.TerminalFontWeight weight) {
+        return EMBEDDED_FONTS.computeIfAbsent(weight, key -> {
+            String resource = FONT_RESOURCES.getOrDefault(key, FONT_RESOURCES.get(EditorManager.TerminalFontWeight.REGULAR));
+            try (InputStream stream = MonoGlyphAtlas.class.getResourceAsStream(resource)) {
+                if (stream == null) {
+                    return new Font(Font.MONOSPACED, Font.PLAIN, 1);
+                }
+                return Font.createFont(Font.TRUETYPE_FONT, stream);
+            } catch (FontFormatException | IOException e) {
+                return new Font(Font.MONOSPACED, Font.PLAIN, 1);
+            }
+        });
+    }
+
+    private int centerBaseline(FontMetrics metrics) {
+        int textHeight = metrics.getAscent() + metrics.getDescent();
+        int topPadding = Math.max(0, (rasterCellHeight - textHeight) / 2);
+        return topPadding + metrics.getAscent();
+    }
+
+    private int maxGlyphWidth(FontMetrics metrics) {
+        int maxWidth = 0;
+        for (int i = 0; i < GLYPHS.length(); i++) {
+            maxWidth = Math.max(maxWidth, metrics.charWidth(GLYPHS.charAt(i)));
+        }
+        return maxWidth;
     }
 
     private void invalidate() {
@@ -162,26 +227,24 @@ public class MonoGlyphAtlas {
         alphaMask = null;
         textureWidth = 0;
         textureHeight = 0;
-        logicalCellWidth = 0;
-        logicalCellHeight = 0;
-        cellWidth = 0;
-        cellHeight = 0;
-        baseline = 0;
+        cellHeightPx = 0;
+        rasterCellWidth = 0;
+        rasterCellHeight = 0;
     }
 
     private ColoredTexture buildColoredTexture(int color) {
+        NativeImage nativeImage = new NativeImage(textureWidth, textureHeight, true);
         int alpha = (color >> 24) & 0xFF;
         int red = (color >> 16) & 0xFF;
         int green = (color >> 8) & 0xFF;
         int blue = color & 0xFF;
 
-        NativeImage nativeImage = new NativeImage(textureWidth, textureHeight, true);
         for (int y = 0; y < textureHeight; y++) {
             for (int x = 0; x < textureWidth; x++) {
                 int mask = alphaMask.getRGB(x, y);
                 int glyphAlpha = (mask >> 24) & 0xFF;
-                int a = glyphAlpha * alpha / 255;
-                nativeImage.setColor(x, y, (a << 24) | (blue << 16) | (green << 8) | red);
+                int finalAlpha = glyphAlpha * alpha / 255;
+                nativeImage.setColor(x, y, (finalAlpha << 24) | (blue << 16) | (green << 8) | red);
             }
         }
 
