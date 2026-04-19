@@ -129,13 +129,30 @@ public class MonoGlyphAtlas {
     public void drawText(DrawContext context, String text, int x, int y, int color) {
         ensureReady();
         ColoredTexture atlas = coloredTextures.computeIfAbsent(color, this::buildColoredTexture);
-        for (int i = 0; i < text.length(); i++) {
+        int i = 0;
+        while (i < text.length()) {
             char ch = text.charAt(i);
             int drawX = x + i * cellWidthPx;
             if (ch == ' ') {
+                i++;
+                continue;
+            }
+            if (ch == '█') {
+                int start = i;
+                while (i < text.length() && text.charAt(i) == '█') {
+                    i++;
+                }
+                context.fill(
+                    x + start * cellWidthPx,
+                    y,
+                    x + i * cellWidthPx,
+                    y + cellHeightPx,
+                    color
+                );
                 continue;
             }
             if (drawSpecialGlyph(context, ch, drawX, y, color)) {
+                i++;
                 continue;
             }
             Glyph glyph = glyphs.getOrDefault(ch, glyphs.get(' '));
@@ -151,6 +168,7 @@ public class MonoGlyphAtlas {
                 textureWidth,
                 textureHeight
             );
+            i++;
         }
     }
 
