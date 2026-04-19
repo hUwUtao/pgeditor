@@ -2,7 +2,10 @@ package work.stdpi.pge.editor.logic
 
 import com.mojang.blaze3d.opengl.GlStateManager
 import net.minecraft.client.util.Window
-import work.stdpi.pge.editor.WindowAccessor
+import work.stdpi.pge.editor.realFramebufferWidth
+import work.stdpi.pge.editor.realScaledHeight
+import work.stdpi.pge.editor.realScaledWidth
+import work.stdpi.pge.editor.realMetrics
 import work.stdpi.pge.editor.logic.EditorManager.DockSide
 import kotlin.math.max
 import kotlin.math.min
@@ -23,8 +26,9 @@ object ViewportController {
     private set
 
   fun calculate(window: Window, side: DockSide, percent: Float) {
-    val sw = (window as Any? as WindowAccessor).`pge$getRealScaledWidth`()
-    val sh = (window as Any? as WindowAccessor).`pge$getRealScaledHeight`()
+    val metrics = window.realMetrics()
+    val sw = metrics.realScaledWidth
+    val sh = metrics.realScaledHeight
 
     if (sw <= 0 || sh <= 0) return
 
@@ -50,9 +54,10 @@ object ViewportController {
 
   fun apply(window: Window) {
     if (!this.isActive) return
-    val realScaledWidth = (window as Any? as WindowAccessor).`pge$getRealScaledWidth`()
-    val realFramebufferWidth = (window as Any? as WindowAccessor).`pge$getRealFramebufferWidth`()
-    val realScaledHeight = (window as Any? as WindowAccessor).`pge$getRealScaledHeight`()
+    val metrics = window.realMetrics()
+    val realScaledWidth = metrics.realScaledWidth
+    val realFramebufferWidth = metrics.realFramebufferWidth
+    val realScaledHeight = metrics.realScaledHeight
     if (realScaledWidth <= 0 || realScaledHeight <= 0) return
 
     val s = realFramebufferWidth.toDouble() / realScaledWidth

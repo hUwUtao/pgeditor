@@ -52,7 +52,7 @@ object EditorConfig {
     constructor() :
         this(
             EditorManager.DockSide.RIGHT.name,
-            EditorManager.RenderMode.TERMINAL.name,
+            "TERMINAL",
             0.52f,
             20,
             EditorManager.TerminalFontWeight.REGULAR.name,

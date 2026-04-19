@@ -17,8 +17,8 @@ import kotlin.math.max
 import kotlin.math.min
 
 class MonoGlyphAtlas {
-  private val glyphs: MutableMap<Char?, Glyph> = HashMap<Char?, Glyph>()
-  private val coloredTextures: MutableMap<Int?, ColoredTexture> = HashMap<Int?, ColoredTexture>()
+  private val glyphs = HashMap<Char, Glyph>()
+  private val coloredTextures = HashMap<Int, ColoredTexture>()
   private var cellWidthPx = 4
   private var fontWeight = TerminalFontWeight.REGULAR
   private var supersample = 8
@@ -78,8 +78,9 @@ class MonoGlyphAtlas {
 
     textureWidth = columns * cellWidthPx
     textureHeight = rows * cellHeightPx
-    alphaMask = BufferedImage(textureWidth, textureHeight, BufferedImage.TYPE_INT_ARGB)
-    val downsample = alphaMask!!.createGraphics()
+    val targetMask = BufferedImage(textureWidth, textureHeight, BufferedImage.TYPE_INT_ARGB)
+    alphaMask = targetMask
+    val downsample = targetMask.createGraphics()
     downsample.setRenderingHint(
         RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC)
     downsample.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY)
@@ -127,8 +128,7 @@ class MonoGlyphAtlas {
 
   fun drawText(context: DrawContext, text: String, x: Int, y: Int, color: Int) {
     ensureReady()
-    val atlas =
-        coloredTextures.computeIfAbsent(color) { color: Int? -> this.buildColoredTexture(color!!) }
+    val atlas = coloredTextures.getOrPut(color) { buildColoredTexture(color) }
     var i = 0
     while (i < text.length) {
       val ch = text.get(i)
@@ -149,14 +149,14 @@ class MonoGlyphAtlas {
         i++
         continue
       }
-      val glyph = glyphs.getOrDefault(ch, glyphs.get(' '))
+      val glyph = glyphs[ch] ?: glyphs.getValue(' ')
       context.drawTexture(
           RenderPipelines.GUI_TEXTURED,
           atlas.id,
           drawX,
           y,
-          glyph?.u?.toFloat() ?: 0.0F,
-          glyph?.v?.toFloat() ?: 0.0F,
+          glyph.u.toFloat(),
+          glyph.v.toFloat(),
           cellWidthPx,
           cellHeightPx,
           textureWidth,
@@ -490,7 +490,7 @@ class MonoGlyphAtlas {
 
   private fun invalidate() {
     for (texture in coloredTextures.values) {
-      texture.texture!!.close()
+      texture.texture.close()
     }
     coloredTextures.clear()
     glyphs.clear()
@@ -504,6 +504,7 @@ class MonoGlyphAtlas {
 
   private fun buildColoredTexture(color: Int): ColoredTexture {
     val nativeImage = NativeImage(textureWidth, textureHeight, true)
+    val maskImage = alphaMask ?: error("glyph atlas mask missing during texture build")
     val alpha = (color shr 24) and 0xFF
     val red = (color shr 16) and 0xFF
     val green = (color shr 8) and 0xFF
@@ -511,7 +512,7 @@ class MonoGlyphAtlas {
 
     for (y in 0..<textureHeight) {
       for (x in 0..<textureWidth) {
-        val mask = alphaMask!!.getRGB(x, y)
+        val mask = maskImage.getRGB(x, y)
         val glyphAlpha = (mask shr 24) and 0xFF
         val finalAlpha = glyphAlpha * alpha / 255
         nativeImage.setColor(x, y, (finalAlpha shl 24) or (blue shl 16) or (green shl 8) or red)
@@ -527,7 +528,7 @@ class MonoGlyphAtlas {
   @JvmRecord private data class Glyph(val u: Int, val v: Int)
 
   @JvmRecord
-  private data class ColoredTexture(val id: Identifier?, val texture: NativeImageBackedTexture?)
+  private data class ColoredTexture(val id: Identifier, val texture: NativeImageBackedTexture)
 
   companion object {
     private const val CELL_HEIGHT_RATIO = 1.9f

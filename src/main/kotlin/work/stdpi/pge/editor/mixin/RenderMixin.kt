@@ -12,7 +12,9 @@ import org.spongepowered.asm.mixin.injection.At
 import org.spongepowered.asm.mixin.injection.Inject
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable
-import work.stdpi.pge.editor.WindowAccessor
+import work.stdpi.pge.editor.realFramebufferHeight
+import work.stdpi.pge.editor.realFramebufferWidth
+import work.stdpi.pge.editor.realMetrics
 import work.stdpi.pge.editor.logic.ViewportController
 import work.stdpi.pge.editor.render.EditorUI
 import kotlin.math.max
@@ -52,8 +54,9 @@ class RenderMixin {
       ViewportController.isWindowMetricsOverridden = `pge$useViewportMetrics`()
       if (ViewportController.isActive) {
         val win = MinecraftClient.getInstance().window
-        val rw = (win as Any? as WindowAccessor).`pge$getRealFramebufferWidth`()
-        val rh = (win as Any? as WindowAccessor).`pge$getRealFramebufferHeight`()
+        val metrics = win.realMetrics()
+        val rw = metrics.realFramebufferWidth
+        val rh = metrics.realFramebufferHeight
         if (`pge$useViewportMetrics`()) {
           ViewportController.apply(win)
         } else {
@@ -118,8 +121,9 @@ class RenderMixin {
       ViewportController.isWindowMetricsOverridden = false
       if (ViewportController.isActive) {
         val win = MinecraftClient.getInstance().window
-        val rw = (win as Any? as WindowAccessor).`pge$getRealFramebufferWidth`()
-        val rh = (win as Any? as WindowAccessor).`pge$getRealFramebufferHeight`()
+        val metrics = win.realMetrics()
+        val rw = metrics.realFramebufferWidth
+        val rh = metrics.realFramebufferHeight
         GlStateManager._viewport(0, 0, rw, rh)
       }
     }
@@ -132,8 +136,9 @@ class RenderMixin {
       if (ViewportController.isActive) {
         ViewportController.isWindowMetricsOverridden = false
         val win = MinecraftClient.getInstance().window
-        val rw = (win as Any? as WindowAccessor).`pge$getRealFramebufferWidth`()
-        val rh = (win as Any? as WindowAccessor).`pge$getRealFramebufferHeight`()
+        val metrics = win.realMetrics()
+        val rw = metrics.realFramebufferWidth
+        val rh = metrics.realFramebufferHeight
         GlStateManager._viewport(0, 0, rw, rh)
         EditorUI.render(g)
       }

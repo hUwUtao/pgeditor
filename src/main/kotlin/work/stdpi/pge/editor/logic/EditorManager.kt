@@ -7,11 +7,14 @@ import net.minecraft.client.option.KeyBinding
 import net.minecraft.client.util.InputUtil
 import org.lwjgl.glfw.GLFW
 import work.stdpi.pge.editor.config.EditorConfig
+import work.stdpi.pge.editor.render.applet.GlyphGridApplet
+import work.stdpi.pge.editor.render.applet.IEditorApplet
+import work.stdpi.pge.editor.render.applet.MiniGameApplet
+import work.stdpi.pge.editor.render.applet.ShellTerminalApplet
 
 object EditorManager {
 
     enum class DockSide { LEFT, TOP, RIGHT, BOTTOM }
-    enum class RenderMode { TERMINAL, GIZMO_GRID, MINIGAME }
     enum class TerminalFontWeight { LIGHT, REGULAR, MEDIUM, BOLD }
     enum class TerminalSupersample(val value: Int) {
         X2(2), X4(4), X8(8), X12(12)
@@ -20,8 +23,11 @@ object EditorManager {
     var side: DockSide = DockSide.RIGHT
         private set
 
-    var renderMode: RenderMode = RenderMode.TERMINAL
-        private set
+    private val applets: List<IEditorApplet> = listOf(ShellTerminalApplet(), GlyphGridApplet, MiniGameApplet)
+    private var currentAppletIndex: Int = 0
+
+    val currentApplet: IEditorApplet
+        get() = applets[currentAppletIndex]
 
     var percent: Float = 0.52f
         set(value) {
@@ -86,7 +92,7 @@ object EditorManager {
                     cycleSide()
                 } else if (GLFW.glfwGetKey(handle, GLFW.GLFW_KEY_LEFT_ALT) == GLFW.GLFW_PRESS ||
                     GLFW.glfwGetKey(handle, GLFW.GLFW_KEY_RIGHT_ALT) == GLFW.GLFW_PRESS) {
-                    cycleRenderMode()
+                    cycleApplet()
                 } else {
                     isEnabled = !isEnabled
                 }
@@ -102,9 +108,8 @@ object EditorManager {
         if (isEnabled) update()
     }
 
-    private fun cycleRenderMode() {
-        val next = (renderMode.ordinal + 1) % RenderMode.entries.size
-        renderMode = RenderMode.entries[next]
+    private fun cycleApplet() {
+        currentAppletIndex = (currentAppletIndex + 1) % applets.size
         saveConfig()
     }
 
@@ -119,7 +124,8 @@ object EditorManager {
     private fun loadConfig() {
         val data = EditorConfig.load()
         side = parseEnum(data.dockSide, DockSide.RIGHT)
-        renderMode = parseEnum(data.renderMode, RenderMode.TERMINAL)
+        currentAppletIndex = applets.indexOfFirst { it.id.equals(data.renderMode, ignoreCase = true) }
+            .takeIf { it >= 0 } ?: 0
         percent = data.dockPercent.coerceIn(0.2f, 0.8f)
         terminalCellWidthPx = data.terminalCellWidthPx.coerceIn(1, 24)
         terminalFontWeight = parseEnum(data.terminalFontWeight, TerminalFontWeight.REGULAR)
@@ -133,7 +139,7 @@ object EditorManager {
         EditorConfig.save(
             EditorConfig.Data(
                 side.name,
-                renderMode.name,
+                currentApplet.id,
                 percent,
                 terminalCellWidthPx,
                 terminalFontWeight.name,

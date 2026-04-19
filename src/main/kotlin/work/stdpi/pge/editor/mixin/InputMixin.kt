@@ -11,7 +11,9 @@ import org.spongepowered.asm.mixin.Shadow
 import org.spongepowered.asm.mixin.injection.At
 import org.spongepowered.asm.mixin.injection.Inject
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo
-import work.stdpi.pge.editor.WindowAccessor
+import work.stdpi.pge.editor.realFramebufferWidth
+import work.stdpi.pge.editor.realMetrics
+import work.stdpi.pge.editor.realScaledWidth
 import work.stdpi.pge.editor.logic.ViewportController
 import work.stdpi.pge.editor.render.EditorUI
 
@@ -27,9 +29,8 @@ class InputMixin {
           ViewportController.isWindowMetricsOverridden &&
           MinecraftClient.getInstance().currentScreen == null) {
         val window = MinecraftClient.getInstance().window
-        val s =
-            (window as Any? as WindowAccessor).`pge$getRealFramebufferWidth`().toDouble() /
-                (window as Any? as WindowAccessor).`pge$getRealScaledWidth`()
+        val metrics = window.realMetrics()
+        val s = metrics.realFramebufferWidth.toDouble() / metrics.realScaledWidth
         this.x -= ViewportController.x * s
         this.y -= ViewportController.y * s
       }
@@ -38,7 +39,8 @@ class InputMixin {
 
     @Inject(method = ["onMouseButton"], at = [At("HEAD")], cancellable = true)
     private fun onMouse(win: Long, input: MouseInput, action: Int, ci: CallbackInfo) {
-      if (EditorUI.onMouse(input.button(), action, input.modifiers())) {
+      if (EditorUI.onMouse(input.button(), action, input.modifiers()) ||
+          EditorUI.shouldBlockGameMouseInput()) {
         ci.cancel()
       }
     }
@@ -50,7 +52,8 @@ class InputMixin {
         verticalAmount: Double,
         ci: CallbackInfo
     ) {
-      if (EditorUI.onScroll(horizontalAmount, verticalAmount)) {
+      if (EditorUI.onScroll(horizontalAmount, verticalAmount) ||
+          EditorUI.shouldBlockGameMouseInput()) {
         ci.cancel()
       }
     }
@@ -60,14 +63,15 @@ class InputMixin {
   class KeyboardMixin {
     @Inject(method = ["onKey"], at = [At("HEAD")], cancellable = true)
     private fun onKey(win: Long, action: Int, input: KeyInput, ci: CallbackInfo) {
-      if (EditorUI.onKey(input.key(), action, input.modifiers())) {
+      if (EditorUI.onKey(input.key(), action, input.modifiers()) ||
+          EditorUI.shouldBlockGameKeyboardInput(input.key())) {
         ci.cancel()
       }
     }
 
     @Inject(method = ["onChar"], at = [At("HEAD")], cancellable = true)
     private fun onChar(win: Long, input: CharInput, ci: CallbackInfo) {
-      if (EditorUI.onChar(input.codepoint())) {
+      if (EditorUI.onChar(input.codepoint()) || EditorUI.shouldBlockGameKeyboardInput()) {
         ci.cancel()
       }
     }

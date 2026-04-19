@@ -2,257 +2,150 @@ package work.stdpi.pge.editor.render
 
 import net.minecraft.client.MinecraftClient
 import net.minecraft.client.gui.DrawContext
+import net.minecraft.client.util.Window
 import org.lwjgl.glfw.GLFW
-import org.slf4j.Logger
-import org.slf4j.LoggerFactory
-import work.stdpi.pge.editor.WindowAccessor
+import work.stdpi.pge.editor.realFramebufferHeight
+import work.stdpi.pge.editor.realFramebufferWidth
+import work.stdpi.pge.editor.realMetrics
+import work.stdpi.pge.editor.realScaledHeight
+import work.stdpi.pge.editor.realScaledWidth
 import work.stdpi.pge.editor.logic.EditorManager
 import work.stdpi.pge.editor.logic.EditorManager.DockSide
 import work.stdpi.pge.editor.logic.ViewportController
+import work.stdpi.pge.editor.render.applet.AbstractTerminalApplet
+import work.stdpi.pge.editor.render.canvas.CanvasRect
+import work.stdpi.pge.editor.render.canvas.CanvasSpace
+import work.stdpi.pge.editor.render.canvas.input.CanvasCharEvent
+import work.stdpi.pge.editor.render.canvas.input.CanvasKeyEvent
+import work.stdpi.pge.editor.render.canvas.input.CanvasPointerEvent
+import work.stdpi.pge.editor.render.canvas.input.CanvasScrollEvent
 import kotlin.math.max
 
 object EditorUI {
-  private val term = TerminalRenderer()
-  private val glyphGrid = GlyphGridRenderer()
-  private val miniGame = MiniGameRenderer()
-  private var regionLogged = false
   private var focused = false
   private var windowFocused = true
-  private var ex = 0
-  private var ey = 0
-  private var ew = 0
-  private var eh = 0
+  private var editorBounds = CanvasRect.ZERO
+  private var appletBounds = CanvasRect.ZERO
 
   fun render(context: DrawContext) {
     if (!EditorManager.isEnabled) return
     val mc = MinecraftClient.getInstance()
     val win = mc.window
-
-    val rsw = (win as Any? as WindowAccessor).`pge$getRealScaledWidth`()
-    val rsh = (win as Any? as WindowAccessor).`pge$getRealScaledHeight`()
-    val rfw = (win as Any? as WindowAccessor).`pge$getRealFramebufferWidth`()
-    val rfh = (win as Any? as WindowAccessor).`pge$getRealFramebufferHeight`()
-
-    // EDITOR zone
-    val gx = ViewportController.x
-    val gy = ViewportController.y
-    val gw = ViewportController.width
-    val gh = ViewportController.height
-
-    when (EditorManager.side) {
-      DockSide.LEFT -> {
-        ex = 0
-        ey = 0
-        ew = gx
-        eh = rsh
-      }
-      DockSide.RIGHT -> {
-        ex = gx + gw
-        ey = 0
-        ew = rsw - ex
-        eh = rsh
-      }
-      DockSide.TOP -> {
-        ex = 0
-        ey = 0
-        ew = rsw
-        eh = gy
-      }
-      DockSide.BOTTOM -> {
-        ex = 0
-        ey = gy + gh
-        ew = rsw
-        eh = rsh - ey
-      }
-    }
-
-    if (ew <= 0 || eh <= 0) return
-
-    if (!regionLogged) {
-      LOGGER.info(
-          "editor region side={} editor=({}, {}) {}x{} viewport=({}, {}) {}x{} screen={}x{}",
-          EditorManager.side,
-          ex,
-          ey,
-          ew,
-          eh,
-          gx,
-          gy,
-          gw,
-          gh,
-          rsw,
-          rsh)
-      regionLogged = true
-    }
+    val metrics = WindowMetrics.from(win)
+    val applet = EditorManager.currentApplet
+    editorBounds = computeEditorBounds(metrics)
+    if (!editorBounds.isVisible) return
 
     val nowWindowFocused =
         GLFW.glfwGetWindowAttrib(win.handle, GLFW.GLFW_FOCUSED) == GLFW.GLFW_TRUE
     if (nowWindowFocused && !windowFocused && focused) {
-      LOGGER.info("minecraft window focus restored while terminal focused")
-      term.focus()
+      applet.onCanvasFocusGained()
     }
     windowFocused = nowWindowFocused
 
-    if (EditorManager.renderMode == EditorManager.RenderMode.TERMINAL) {
-      val framebufferScaleX = if (rsw > 0) rfw.toFloat() / rsw else 1.0f
-      val framebufferScaleY = if (rsh > 0) rfh.toFloat() / rsh else 1.0f
-      val exPx = Math.round(ex * framebufferScaleX)
-      val eyPx = Math.round(ey * framebufferScaleY)
-      val ewPx = max(1, Math.round(ew * framebufferScaleX))
-      val ehPx = max(1, Math.round(eh * framebufferScaleY))
+    appletBounds =
+        when (applet.space) {
+          CanvasSpace.FRAMEBUFFER -> editorBounds.toFramebuffer(metrics)
+          CanvasSpace.SCALED -> editorBounds
+        }
 
-      context.matrices.pushMatrix()
-      context.matrices.scale(1.0f / framebufferScaleX, 1.0f / framebufferScaleY)
-      context.fill(exPx, eyPx, exPx + ewPx, eyPx + ehPx, -0xe1e1e2)
-      term.render(context, exPx, eyPx, ewPx, ehPx)
-      context.matrices.popMatrix()
-    } else if (EditorManager.renderMode == EditorManager.RenderMode.GIZMO_GRID) {
-      val liedScaleX = win.scaledWidth.toFloat() / rsw
-      val liedScaleY = win.scaledHeight.toFloat() / rsh
-      context.matrices.pushMatrix()
-      context.matrices.scale(liedScaleX, liedScaleY)
-      context.fill(ex, ey, ex + ew, ey + eh, -0xe1e1e2)
-      glyphGrid.render(context, ex, ey, ew, eh)
-      context.matrices.popMatrix()
-    } else {
-      val liedScaleX = win.scaledWidth.toFloat() / rsw
-      val liedScaleY = win.scaledHeight.toFloat() / rsh
-      context.matrices.pushMatrix()
-      context.matrices.scale(liedScaleX, liedScaleY)
-      context.fill(ex, ey, ex + ew, ey + eh, -0xe1e1e2)
-      miniGame.render(context, ex, ey, ew, eh)
-      context.matrices.popMatrix()
+    context.matrices.pushMatrix()
+    when (applet.space) {
+      CanvasSpace.FRAMEBUFFER ->
+          context.matrices.scale(1.0f / metrics.framebufferScaleX, 1.0f / metrics.framebufferScaleY)
+      CanvasSpace.SCALED -> context.matrices.scale(metrics.liedScaleX, metrics.liedScaleY)
     }
+    context.fill(
+        appletBounds.x,
+        appletBounds.y,
+        appletBounds.x + appletBounds.width,
+        appletBounds.y + appletBounds.height,
+        PANEL_BG)
+    applet.render(context, appletBounds)
+    context.matrices.popMatrix()
   }
 
   fun onMouse(b: Int, a: Int, m: Int): Boolean {
     if (!EditorManager.isEnabled) return false
     val mc = MinecraftClient.getInstance()
-    val win = mc.window
-    if (EditorManager.renderMode == EditorManager.RenderMode.TERMINAL) {
-      val framebufferScaleX =
-          if ((win as Any? as WindowAccessor).`pge$getRealScaledWidth`() > 0)
-              (win as Any? as WindowAccessor).`pge$getRealFramebufferWidth`().toFloat() /
-                  (win as Any? as WindowAccessor).`pge$getRealScaledWidth`()
-          else 1.0f
-      val framebufferScaleY =
-          if ((win as Any? as WindowAccessor).`pge$getRealScaledHeight`() > 0)
-              (win as Any? as WindowAccessor).`pge$getRealFramebufferHeight`().toFloat() /
-                  (win as Any? as WindowAccessor).`pge$getRealScaledHeight`()
-          else 1.0f
-      val exPx = Math.round(ex * framebufferScaleX)
-      val eyPx = Math.round(ey * framebufferScaleY)
-      val ewPx = max(1, Math.round(ew * framebufferScaleX))
-      val ehPx = max(1, Math.round(eh * framebufferScaleY))
-      val mx = mc.mouse.x.toInt()
-      val my = mc.mouse.y.toInt()
+    val applet = EditorManager.currentApplet
+    val (mx, my) =
+        when (applet.space) {
+          CanvasSpace.FRAMEBUFFER -> mc.mouse.x.toInt() to mc.mouse.y.toInt()
+          CanvasSpace.SCALED -> {
+            val metrics = WindowMetrics.from(mc.window)
+            (mc.mouse.x / metrics.framebufferScale).toInt() to (mc.mouse.y / metrics.framebufferScale).toInt()
+          }
+        }
 
-      if (mx >= exPx && mx < exPx + ewPx && my >= eyPx && my < eyPx + ehPx) {
-        focused = true
-        LOGGER.info("terminal mouse focus acquired at {},{}", mx - exPx, my - eyPx)
-        term.focus()
-        term.onMouse(mx - exPx, my - eyPx, b, a, m, ewPx, ehPx)
-        return true
+    if (appletBounds.contains(mx, my)) {
+      if (!focused) {
+        applet.onCanvasFocusGained()
       }
-      if (focused) {
-        LOGGER.info("terminal mouse focus lost")
-      }
-      focused = false
-      return false
-    }
-    val s =
-        (win as Any? as WindowAccessor).`pge$getRealFramebufferWidth`().toDouble() /
-            (win as Any? as WindowAccessor).`pge$getRealScaledWidth`()
-    val mx = (mc.mouse.x / s).toInt()
-    val my = (mc.mouse.y / s).toInt()
-
-    if (mx >= ex && mx < ex + ew && my >= ey && my < ey + eh) {
       focused = true
-      if (EditorManager.renderMode == EditorManager.RenderMode.TERMINAL) {
-        LOGGER.info("terminal mouse focus acquired at {},{}", mx - ex, my - ey)
-        term.focus()
-        term.onMouse(mx - ex, my - ey, b, a, m, ew, eh)
-      } else if (EditorManager.renderMode == EditorManager.RenderMode.GIZMO_GRID) {
-        glyphGrid.onMouse(mx - ex, my - ey, b, a, m, ew, eh)
-      } else {
-        miniGame.onMouse(mx - ex, my - ey, b, a, m, ew, eh)
-      }
-      return true
+      return applet.onCanvasPointerButton(
+          CanvasPointerEvent(
+              localX = mx - appletBounds.x,
+              localY = my - appletBounds.y,
+              bounds = appletBounds,
+              button = b,
+              action = a,
+              mods = m))
     }
-    if (focused) {
-      LOGGER.info("terminal mouse focus lost")
-    }
+    if (focused) applet.onCanvasFocusLost()
     focused = false
     return false
   }
 
+  fun shouldBlockGameMouseInput(): Boolean = EditorManager.isEnabled
+
+  fun shouldBlockGameKeyboardInput(key: Int? = null): Boolean {
+    if (!EditorManager.isEnabled) return false
+    return key != GLFW.GLFW_KEY_BACKSLASH
+  }
+
   fun onMove(x: Double, y: Double) {
-    if (!EditorManager.isEnabled) return
-    val mc = MinecraftClient.getInstance()
-    val win = mc.window
-    if (EditorManager.renderMode == EditorManager.RenderMode.TERMINAL) {
-      val framebufferScaleX =
-          if ((win as Any? as WindowAccessor).`pge$getRealScaledWidth`() > 0)
-              (win as Any? as WindowAccessor).`pge$getRealFramebufferWidth`().toFloat() /
-                  (win as Any? as WindowAccessor).`pge$getRealScaledWidth`()
-          else 1.0f
-      val framebufferScaleY =
-          if ((win as Any? as WindowAccessor).`pge$getRealScaledHeight`() > 0)
-              (win as Any? as WindowAccessor).`pge$getRealFramebufferHeight`().toFloat() /
-                  (win as Any? as WindowAccessor).`pge$getRealScaledHeight`()
-          else 1.0f
-      val exPx = Math.round(ex * framebufferScaleX)
-      val eyPx = Math.round(ey * framebufferScaleY)
-      val ewPx = max(1, Math.round(ew * framebufferScaleX))
-      val ehPx = max(1, Math.round(eh * framebufferScaleY))
-      val mx = x.toInt()
-      val my = y.toInt()
-      if (mx >= exPx && mx < exPx + ewPx && my >= eyPx && my < eyPx + ehPx) {
-        term.onMove(mx - exPx, my - eyPx, ewPx, ehPx)
-      }
-      return
-    }
-    val s =
-        (win as Any? as WindowAccessor).`pge$getRealFramebufferWidth`().toDouble() /
-            (win as Any? as WindowAccessor).`pge$getRealScaledWidth`()
-    val mx = (x / s).toInt()
-    val my = (y / s).toInt()
-    if (mx >= ex && mx < ex + ew && my >= ey && my < ey + eh) {
-      if (EditorManager.renderMode == EditorManager.RenderMode.TERMINAL) {
-        term.onMove(mx - ex, my - ey, ew, eh)
-      } else if (EditorManager.renderMode == EditorManager.RenderMode.GIZMO_GRID) {
-        glyphGrid.onMove(mx - ex, my - ey, ew, eh)
-      } else {
-        miniGame.onMove(mx - ex, my - ey, ew, eh)
-      }
+    if (!EditorManager.isEnabled || !focused) return
+    val applet = EditorManager.currentApplet
+    val (mx, my) =
+        when (applet.space) {
+          CanvasSpace.FRAMEBUFFER -> x.toInt() to y.toInt()
+          CanvasSpace.SCALED -> {
+            val metrics = WindowMetrics.from(MinecraftClient.getInstance().window)
+            (x / metrics.framebufferScale).toInt() to (y / metrics.framebufferScale).toInt()
+          }
+        }
+    if (appletBounds.contains(mx, my)) {
+      applet.onCanvasPointerMove(
+          CanvasPointerEvent(
+              localX = mx - appletBounds.x,
+              localY = my - appletBounds.y,
+              bounds = appletBounds))
     }
   }
 
   fun onScroll(horizontalAmount: Double, verticalAmount: Double): Boolean {
-    if (!EditorManager.isEnabled) return false
-    if (EditorManager.renderMode != EditorManager.RenderMode.TERMINAL) return false
-
+    if (!EditorManager.isEnabled || !focused) return false
     val mc = MinecraftClient.getInstance()
-    val win = mc.window
-    val framebufferScaleX =
-        if ((win as Any? as WindowAccessor).`pge$getRealScaledWidth`() > 0)
-            (win as Any? as WindowAccessor).`pge$getRealFramebufferWidth`().toFloat() /
-                (win as Any? as WindowAccessor).`pge$getRealScaledWidth`()
-        else 1.0f
-    val framebufferScaleY =
-        if ((win as Any? as WindowAccessor).`pge$getRealScaledHeight`() > 0)
-            (win as Any? as WindowAccessor).`pge$getRealFramebufferHeight`().toFloat() /
-                (win as Any? as WindowAccessor).`pge$getRealScaledHeight`()
-        else 1.0f
-    val exPx = Math.round(ex * framebufferScaleX)
-    val eyPx = Math.round(ey * framebufferScaleY)
-    val ewPx = max(1, Math.round(ew * framebufferScaleX))
-    val ehPx = max(1, Math.round(eh * framebufferScaleY))
-    val mx = mc.mouse.x.toInt()
-    val my = mc.mouse.y.toInt()
+    val applet = EditorManager.currentApplet
+    val (mx, my) =
+        when (applet.space) {
+          CanvasSpace.FRAMEBUFFER -> mc.mouse.x.toInt() to mc.mouse.y.toInt()
+          CanvasSpace.SCALED -> {
+            val metrics = WindowMetrics.from(mc.window)
+            (mc.mouse.x / metrics.framebufferScale).toInt() to (mc.mouse.y / metrics.framebufferScale).toInt()
+          }
+        }
 
-    if (mx >= exPx && mx < exPx + ewPx && my >= eyPx && my < eyPx + ehPx) {
-      return term.onScroll(mx - exPx, my - eyPx, horizontalAmount, verticalAmount, 0, ewPx, ehPx)
+    if (appletBounds.contains(mx, my)) {
+      return applet.onCanvasScroll(
+          CanvasScrollEvent(
+              localX = mx - appletBounds.x,
+              localY = my - appletBounds.y,
+              bounds = appletBounds,
+              horizontalAmount = horizontalAmount,
+              verticalAmount = verticalAmount,
+              mods = 0))
     }
     return false
   }
@@ -260,36 +153,71 @@ object EditorUI {
   fun onKey(k: Int, a: Int, m: Int): Boolean {
     if (!EditorManager.isEnabled) return false
     if (k == GLFW.GLFW_KEY_BACKSLASH) return false
-    val terminalGameplayCapture =
-        EditorManager.renderMode == EditorManager.RenderMode.TERMINAL &&
-            MinecraftClient.getInstance().currentScreen == null
-    if (focused || terminalGameplayCapture) {
-      if (EditorManager.renderMode == EditorManager.RenderMode.TERMINAL) {
-        LOGGER.info("terminal key key={} action={} mods={}", k, a, m)
-        term.onKey(k, a, m)
-        return true
-      } else if (EditorManager.renderMode == EditorManager.RenderMode.GIZMO_GRID) {
-        return glyphGrid.onKey(k, a)
-      } else {
-        return miniGame.onKey(k, a)
-      }
+    val applet = EditorManager.currentApplet
+    if (focused) {
+      return applet.onCanvasKey(CanvasKeyEvent(k, a, m))
     }
     return false
   }
 
   fun onChar(c: Int): Boolean {
-    val terminalGameplayCapture =
-        EditorManager.isEnabled &&
-            EditorManager.renderMode == EditorManager.RenderMode.TERMINAL &&
-            MinecraftClient.getInstance().currentScreen == null
-    if (EditorManager.isEnabled &&
-        EditorManager.renderMode == EditorManager.RenderMode.TERMINAL &&
-        (focused || terminalGameplayCapture)) {
-      LOGGER.info("terminal char codepoint={}", c)
-      term.onChar(c)
-      return true
+    val applet = EditorManager.currentApplet
+    if (EditorManager.isEnabled && focused) {
+      return applet.onCanvasChar(CanvasCharEvent(c))
     }
     return false
   }
-  private val LOGGER: Logger = LoggerFactory.getLogger("pge-editor/ui")
+
+  private fun computeEditorBounds(metrics: WindowMetrics): CanvasRect {
+    val gx = ViewportController.x
+    val gy = ViewportController.y
+    val gw = ViewportController.width
+    val gh = ViewportController.height
+    return when (EditorManager.side) {
+      DockSide.LEFT -> CanvasRect(0, 0, gx, metrics.scaledHeight)
+      DockSide.RIGHT -> CanvasRect(gx + gw, 0, metrics.scaledWidth - (gx + gw), metrics.scaledHeight)
+      DockSide.TOP -> CanvasRect(0, 0, metrics.scaledWidth, gy)
+      DockSide.BOTTOM -> CanvasRect(0, gy + gh, metrics.scaledWidth, metrics.scaledHeight - (gy + gh))
+    }
+  }
+
+  private fun CanvasRect.toFramebuffer(metrics: WindowMetrics): CanvasRect =
+      CanvasRect(
+          Math.round(x * metrics.framebufferScaleX),
+          Math.round(y * metrics.framebufferScaleY),
+          max(1, Math.round(width * metrics.framebufferScaleX)),
+          max(1, Math.round(height * metrics.framebufferScaleY)))
+
+  private data class WindowMetrics(
+      val scaledWidth: Int,
+      val scaledHeight: Int,
+      val framebufferScaleX: Float,
+      val framebufferScaleY: Float,
+      val framebufferScale: Double,
+      val liedScaleX: Float,
+      val liedScaleY: Float
+  ) {
+    companion object {
+      fun from(window: Window): WindowMetrics {
+        val real = window.realMetrics()
+        val scaledWidth = real.realScaledWidth
+        val scaledHeight = real.realScaledHeight
+        val framebufferWidth = real.realFramebufferWidth
+        val framebufferHeight = real.realFramebufferHeight
+        val framebufferScaleX = if (scaledWidth > 0) framebufferWidth.toFloat() / scaledWidth else 1.0f
+        val framebufferScaleY =
+            if (scaledHeight > 0) framebufferHeight.toFloat() / scaledHeight else 1.0f
+        return WindowMetrics(
+            scaledWidth = scaledWidth,
+            scaledHeight = scaledHeight,
+            framebufferScaleX = framebufferScaleX,
+            framebufferScaleY = framebufferScaleY,
+            framebufferScale = if (scaledWidth > 0) framebufferWidth.toDouble() / scaledWidth else 1.0,
+            liedScaleX = if (scaledWidth > 0) window.scaledWidth.toFloat() / scaledWidth else 1.0f,
+            liedScaleY = if (scaledHeight > 0) window.scaledHeight.toFloat() / scaledHeight else 1.0f)
+      }
+    }
+  }
 }
+
+private const val PANEL_BG = -0xe1e1e2

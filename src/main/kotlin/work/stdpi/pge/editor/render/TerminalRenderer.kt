@@ -19,9 +19,6 @@ import com.jediterm.terminal.emulator.mouse.MouseFormat
 import com.jediterm.terminal.emulator.mouse.MouseMode
 import com.jediterm.terminal.model.*
 import com.jediterm.terminal.ui.JediTermExecutorServiceManager
-import com.pty4j.PtyProcess
-import com.pty4j.PtyProcessBuilder
-import com.pty4j.WinSize
 import net.minecraft.client.gui.DrawContext
 import org.lwjgl.glfw.GLFW
 import org.slf4j.Logger
@@ -29,13 +26,16 @@ import org.slf4j.LoggerFactory
 import work.stdpi.pge.editor.logic.EditorManager
 import work.stdpi.pge.editor.logic.EditorManager.TerminalFontWeight
 import work.stdpi.pge.editor.logic.EditorManager.TerminalSupersample
+import work.stdpi.pge.editor.terminal.ITerminalHandle
+import work.stdpi.pge.editor.terminal.ITerminalIo
 import java.io.IOException
-import java.nio.charset.StandardCharsets
-import java.util.*
+import java.util.BitSet
 import kotlin.math.max
 import kotlin.math.min
 
-class TerminalRenderer {
+class TerminalRenderer(
+    private val terminalIo: ITerminalIo
+) {
   private val atlas = MonoGlyphAtlas()
   private val palette: ColorPalette = ColorPaletteImpl.XTERM_PALETTE
   private val display = NativeDisplay()
@@ -43,7 +43,7 @@ class TerminalRenderer {
   private var textBuffer: TerminalTextBuffer? = null
   private var terminal: JediTerminal? = null
   private var starter: TerminalStarter? = null
-  private var process: Process? = null
+  private var terminalHandle: ITerminalHandle? = null
   private var executorServiceManager: TerminalExecutorServiceManager? = null
 
   private var pixelWidth = 0
@@ -67,17 +67,18 @@ class TerminalRenderer {
     resizeIfNeeded(width, height)
 
     context.fill(x, y, x + width, y + height, DEFAULT_BG)
-    if (!initialized || textBuffer == null) {
+    val buffer = textBuffer ?: return
+    if (!initialized) {
       return
     }
 
     val cellWidth = atlas.cellWidth
     val cellHeight = atlas.cellHeight
-    textBuffer!!.lock()
+    buffer.lock()
     try {
       rebuildDirtyRowPlans()
     } finally {
-      textBuffer!!.unlock()
+      buffer.unlock()
     }
 
     val plans = rowPlans
@@ -109,9 +110,9 @@ class TerminalRenderer {
       val mappedButton = toMouseButton(button)
       if (action == GLFW.GLFW_PRESS) {
         activeMouseButton = mappedButton
-        terminal!!.mousePressed(col, row, MouseEvent(mappedButton, modifiers))
+        terminal?.mousePressed(col, row, MouseEvent(mappedButton, modifiers))
       } else if (action == GLFW.GLFW_RELEASE) {
-        terminal!!.mouseReleased(col, row, MouseEvent(mappedButton, modifiers))
+        terminal?.mouseReleased(col, row, MouseEvent(mappedButton, modifiers))
         if (activeMouseButton == mappedButton) {
           activeMouseButton = MouseButtonCodes.NONE
         }
@@ -131,9 +132,9 @@ class TerminalRenderer {
     val row = clamp((localY - PADDING_Y) / atlas.cellHeight, 0, max(0, rows - 1))
     val event = MouseEvent(activeMouseButton, 0)
     if (activeMouseButton == MouseButtonCodes.NONE) {
-      terminal!!.mouseMoved(col, row, event)
+      terminal?.mouseMoved(col, row, event)
     } else {
-      terminal!!.mouseDragged(col, row, event)
+      terminal?.mouseDragged(col, row, event)
     }
   }
 
@@ -156,7 +157,7 @@ class TerminalRenderer {
     val modifiers = toMouseModifiers(mods)
     val wheelButton =
         if (verticalAmount > 0.0) MouseButtonCodes.SCROLLDOWN else MouseButtonCodes.SCROLLUP
-    terminal!!.mouseWheelMoved(col, row, MouseWheelEvent(wheelButton, modifiers))
+    terminal?.mouseWheelMoved(col, row, MouseWheelEvent(wheelButton, modifiers))
     return true
   }
 
@@ -185,24 +186,24 @@ class TerminalRenderer {
 
     if (key == GLFW.GLFW_KEY_TAB) {
       if ((mods and GLFW.GLFW_MOD_SHIFT) != 0) {
-        starter!!.sendBytes(byteArrayOf(27, '['.code.toByte(), 'Z'.code.toByte()), true)
+        starter?.sendBytes(byteArrayOf(27, '['.code.toByte(), 'Z'.code.toByte()), true)
       } else {
-        starter!!.sendBytes(byteArrayOf('\t'.code.toByte()), true)
+        starter?.sendBytes(byteArrayOf('\t'.code.toByte()), true)
       }
       return true
     }
 
     if (translatedKey != -1) {
-      val bytes = terminal!!.getCodeForKey(translatedKey, translatedModifiers)
+      val bytes = terminal?.getCodeForKey(translatedKey, translatedModifiers)
       if (bytes != null) {
-        starter!!.sendBytes(bytes, true)
+        starter?.sendBytes(bytes, true)
         return true
       }
     }
 
     if ((mods and GLFW.GLFW_MOD_CONTROL) != 0 && key >= GLFW.GLFW_KEY_A && key <= GLFW.GLFW_KEY_Z) {
       val ctrlChar = (key - GLFW.GLFW_KEY_A + 1).toChar()
-      starter!!.sendBytes(byteArrayOf(ctrlChar.code.toByte()), true)
+      starter?.sendBytes(byteArrayOf(ctrlChar.code.toByte()), true)
       return true
     }
 
@@ -213,7 +214,7 @@ class TerminalRenderer {
     if (!initialized) {
       return false
     }
-    starter!!.sendString(String(Character.toChars(codepoint)), true)
+    starter?.sendString(String(Character.toChars(codepoint)), true)
     return true
   }
 
@@ -258,10 +259,11 @@ class TerminalRenderer {
             TerminalColor.rgb(
                 (DEFAULT_BG shr 16) and 0xFF, (DEFAULT_BG shr 8) and 0xFF, DEFAULT_BG and 0xFF)))
 
-    textBuffer = TerminalTextBuffer(columns, rows, styleState)
+    val buffer = TerminalTextBuffer(columns, rows, styleState)
+    textBuffer = buffer
     rowPlans = arrayOfNulls<RowPlan>(rows)
     markAllRowsDirty()
-    textBuffer!!.addChangesListener(
+    buffer.addChangesListener(
         object : TextBufferChangesListener {
           override fun linesChanged(fromIndex: Int) {
             markRowsDirty(max(0, fromIndex), rows)
@@ -277,37 +279,26 @@ class TerminalRenderer {
             markAllRowsDirty()
           }
         })
-    terminal = JediTerminal(display, textBuffer!!, styleState)
-    executorServiceManager = JediTermExecutorServiceManager()
+    val createdTerminal = JediTerminal(display, buffer, styleState)
+    terminal = createdTerminal
+    val executorManager = JediTermExecutorServiceManager()
+    executorServiceManager = executorManager
 
     try {
-      val connector: ProcessTtyConnector =
-          object :
-              ProcessTtyConnector(
-                  createProcessBuilder(columns, rows).start(), StandardCharsets.UTF_8) {
-            override fun getName(): String {
-              return "PGE"
-            }
-
-            override fun resize(termSize: TermSize) {
-              val ttyProcess = process
-              if (ttyProcess is PtyProcess) {
-                  ttyProcess.winSize = WinSize(termSize.columns, termSize.rows)
-              }
-            }
-          }
-      process = connector.process
-      val typeAheadModel = NoOpTypeAheadModel(terminal!!, textBuffer!!)
+      val openedHandle = terminalIo.open(columns, rows)
+      terminalHandle = openedHandle
+      val typeAheadModel = NoOpTypeAheadModel(createdTerminal, buffer)
       val typeAheadManager = TerminalTypeAheadManager(typeAheadModel)
-      starter =
+      val createdStarter =
           TerminalStarter(
-              terminal!!,
-              connector,
+              createdTerminal,
+              openedHandle.ttyConnector,
               TtyBasedArrayDataStream(
-                  connector, Runnable { typeAheadManager.onTerminalStateChanged() }),
+                  openedHandle.ttyConnector, Runnable { typeAheadManager.onTerminalStateChanged() }),
               typeAheadManager,
-              executorServiceManager!!)
-      executorServiceManager!!.unboundedExecutorService.submit(Runnable { starter!!.start() })
+              executorManager)
+      starter = createdStarter
+      executorManager.unboundedExecutorService.submit(Runnable { createdStarter.start() })
       initialized = true
       LOGGER.info(
           "initialized native terminal {}x{} cells for {}x{} px", columns, rows, width, height)
@@ -337,35 +328,10 @@ class TerminalRenderer {
     rows = newRows
     rowPlans = arrayOfNulls<RowPlan>(rows)
     markAllRowsDirty()
-    starter!!.postResize(TermSize(columns, rows), RequestOrigin.User)
+    terminalHandle?.resize(columns, rows)
+    starter?.postResize(TermSize(columns, rows), RequestOrigin.User)
     pendingTerminalRefresh = false
     LOGGER.info("resized native terminal to {}x{} cells for {}x{} px", columns, rows, width, height)
-  }
-
-  private fun createProcessBuilder(columns: Int, rows: Int): PtyProcessBuilder {
-    val env = HashMap(System.getenv())
-    env.put("TERM", "xterm-256color")
-    env.put("COLORTERM", "truecolor")
-    env.put("TERM_PROGRAM", "pge-editor")
-    env.put("TERM_PROGRAM_VERSION", "dev")
-
-    return PtyProcessBuilder(buildShellCommand())
-        .setDirectory(System.getProperty("user.home"))
-        .setEnvironment(env)
-        .setInitialColumns(columns)
-        .setInitialRows(rows)
-  }
-
-  private fun buildShellCommand(): Array<String> {
-    if (System.getProperty("os.name").lowercase(Locale.getDefault()).contains("win")) {
-      return arrayOf("cmd.exe")
-    }
-
-    val shell = System.getenv("SHELL")
-    if (shell != null && !shell.isBlank()) {
-      return arrayOf(shell, "-i")
-    }
-    return arrayOf("/bin/bash", "--login")
   }
 
   private fun drawRowPlan(
@@ -380,14 +346,14 @@ class TerminalRenderer {
     if (rowPlan == null) {
       return
     }
-    for (run in rowPlan.runs!!) {
+    for (run in rowPlan.runs) {
       drawRun(
           context,
           x,
           y,
           row,
           run.startCol,
-          run.text!!,
+          run.text,
           run.foreground,
           run.background,
           cellWidth,
@@ -400,7 +366,7 @@ class TerminalRenderer {
     var runForeground: Int = DEFAULT_FG
     var runBackground: Int = DEFAULT_BG
     val builder = StringBuilder(columns)
-    val runs: MutableList<RunPlan> = ArrayList<RunPlan>()
+    val runs = ArrayList<RunPlan>()
 
     for (col in 0..<columns) {
       val ch = getSafeCharAt(col, row)
@@ -454,8 +420,7 @@ class TerminalRenderer {
       return
     }
 
-    val shape: CursorShape =
-        (if (display.curShape != null) display.curShape else CursorShape.STEADY_BLOCK)!!
+    val shape = display.curShape ?: CursorShape.STEADY_BLOCK
     if (shape.isBlinking && ((System.nanoTime() / 350000000L) % 2L) == 0L) {
       return
     }
@@ -489,7 +454,7 @@ class TerminalRenderer {
 
   private fun getSafeCharAt(col: Int, row: Int): Char {
     try {
-      return normalizeGlyph(textBuffer!!.getCharAt(col, row))
+      return normalizeGlyph(textBuffer?.getCharAt(col, row) ?: ' ')
     } catch (ignored: RuntimeException) {
       return ' '
     }
@@ -497,7 +462,7 @@ class TerminalRenderer {
 
   private fun getSafeStyleAt(col: Int, row: Int): CellStyle {
     try {
-      return resolveStyle(textBuffer!!.getStyleAt(col, row))
+      return resolveStyle(textBuffer?.getStyleAt(col, row))
     } catch (ignored: RuntimeException) {
       return CellStyle(DEFAULT_FG, DEFAULT_BG)
     }
@@ -570,34 +535,15 @@ class TerminalRenderer {
   }
 
   private fun toMouseModifiers(mods: Int): Int {
-    var result = 0
-    if ((mods and GLFW.GLFW_MOD_SHIFT) != 0) {
-      result = result or MouseButtonModifierFlags.MOUSE_BUTTON_SHIFT_FLAG
+    return MOUSE_MODIFIER_FLAGS.fold(0) { acc, (glfwMask, terminalMask) ->
+      if ((mods and glfwMask) != 0) acc or terminalMask else acc
     }
-    if ((mods and GLFW.GLFW_MOD_CONTROL) != 0) {
-      result = result or MouseButtonModifierFlags.MOUSE_BUTTON_CTRL_FLAG
-    }
-    if ((mods and GLFW.GLFW_MOD_ALT) != 0) {
-      result = result or MouseButtonModifierFlags.MOUSE_BUTTON_META_FLAG
-    }
-    return result
   }
 
   private fun toKeyModifiers(mods: Int): Int {
-    var result = 0
-    if ((mods and GLFW.GLFW_MOD_SHIFT) != 0) {
-      result = result or InputEvent.SHIFT_MASK
+    return KEY_MODIFIER_FLAGS.fold(0) { acc, (glfwMask, terminalMask) ->
+      if ((mods and glfwMask) != 0) acc or terminalMask else acc
     }
-    if ((mods and GLFW.GLFW_MOD_CONTROL) != 0) {
-      result = result or InputEvent.CTRL_MASK
-    }
-    if ((mods and GLFW.GLFW_MOD_ALT) != 0) {
-      result = result or InputEvent.ALT_MASK
-    }
-    if ((mods and GLFW.GLFW_MOD_SUPER) != 0) {
-      result = result or InputEvent.META_MASK
-    }
-    return result
   }
 
   private fun toTerminalKey(key: Int): Int {
@@ -657,7 +603,7 @@ class TerminalRenderer {
       } else if (dirtyRows.isEmpty) {
         return
       } else {
-        dirtySnapshot = dirtyRows.clone() as BitSet
+        dirtySnapshot = dirtyRows.get(0, rows)
         dirtyRows.clear()
       }
     }
@@ -688,14 +634,9 @@ class TerminalRenderer {
   @JvmRecord private data class CellStyle(val foreground: Int, val background: Int)
 
   @JvmRecord
-  private data class RunPlan(
-      val startCol: Int,
-      val text: String?,
-      val foreground: Int,
-      val background: Int
-  )
+  private data class RunPlan(val startCol: Int, val text: String, val foreground: Int, val background: Int)
 
-  @JvmRecord private data class RowPlan(val runs: MutableList<RunPlan>?)
+  @JvmRecord private data class RowPlan(val runs: List<RunPlan>)
 
   private class NativeDisplay : TerminalDisplay {
     var curX = 0
@@ -801,6 +742,17 @@ class TerminalRenderer {
 
   companion object {
     private val LOGGER: Logger = LoggerFactory.getLogger("pge-editor/native-terminal")
+    private val MOUSE_MODIFIER_FLAGS =
+        arrayOf(
+            GLFW.GLFW_MOD_SHIFT to MouseButtonModifierFlags.MOUSE_BUTTON_SHIFT_FLAG,
+            GLFW.GLFW_MOD_CONTROL to MouseButtonModifierFlags.MOUSE_BUTTON_CTRL_FLAG,
+            GLFW.GLFW_MOD_ALT to MouseButtonModifierFlags.MOUSE_BUTTON_META_FLAG)
+    private val KEY_MODIFIER_FLAGS =
+        arrayOf(
+            GLFW.GLFW_MOD_SHIFT to InputEvent.SHIFT_MASK,
+            GLFW.GLFW_MOD_CONTROL to InputEvent.CTRL_MASK,
+            GLFW.GLFW_MOD_ALT to InputEvent.ALT_MASK,
+            GLFW.GLFW_MOD_SUPER to InputEvent.META_MASK)
     private const val PADDING_X = 0
     private const val PADDING_Y = 0
     private const val DEFAULT_BG = -0xf4f0ec

@@ -6,11 +6,12 @@ import org.spongepowered.asm.mixin.gen.Accessor
 import org.spongepowered.asm.mixin.injection.At
 import org.spongepowered.asm.mixin.injection.Inject
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable
-import work.stdpi.pge.editor.WindowAccessor
+import work.stdpi.pge.editor.IWindowAccessor
 import work.stdpi.pge.editor.logic.ViewportController
+import kotlin.math.roundToInt
 
 @Mixin(Window::class)
-abstract class WindowMixin : WindowAccessor {
+abstract class WindowMixin : IWindowAccessor {
   @Accessor("width") abstract override fun `pge$getRealWindowWidth`(): Int
 
   @Accessor("height") abstract override fun `pge$getRealWindowHeight`(): Int
@@ -35,42 +36,42 @@ abstract class WindowMixin : WindowAccessor {
   }
 
   @Inject(method = ["getWidth"], at = [At("HEAD")], cancellable = true)
-  private fun getWidth(cir: CallbackInfoReturnable<Int?>) {
+  private fun getWidth(cir: CallbackInfoReturnable<Int>) {
     if (ViewportController.isActive && ViewportController.isWindowMetricsOverridden) {
-        cir.returnValue = Math.round(ViewportController.width / `pge$getWindowScale`()).toInt()
+        cir.returnValue = (ViewportController.width / `pge$getWindowScale`()).roundToInt()
     }
   }
 
   @Inject(method = ["getHeight"], at = [At("HEAD")], cancellable = true)
-  private fun getHeight(cir: CallbackInfoReturnable<Int?>) {
+  private fun getHeight(cir: CallbackInfoReturnable<Int>) {
     if (ViewportController.isActive && ViewportController.isWindowMetricsOverridden) {
-        cir.returnValue = Math.round(ViewportController.height / `pge$getWindowScale`()).toInt()
+        cir.returnValue = (ViewportController.height / `pge$getWindowScale`()).roundToInt()
     }
   }
 
   @Inject(method = ["getFramebufferWidth"], at = [At("HEAD")], cancellable = true)
-  private fun getFramebufferWidth(cir: CallbackInfoReturnable<Int?>) {
+  private fun getFramebufferWidth(cir: CallbackInfoReturnable<Int>) {
     if (ViewportController.isActive && ViewportController.isWindowMetricsOverridden) {
         cir.returnValue = (ViewportController.width * `pge$getScale`()).toInt()
     }
   }
 
   @Inject(method = ["getFramebufferHeight"], at = [At("HEAD")], cancellable = true)
-  private fun getFramebufferHeight(cir: CallbackInfoReturnable<Int?>) {
+  private fun getFramebufferHeight(cir: CallbackInfoReturnable<Int>) {
     if (ViewportController.isActive && ViewportController.isWindowMetricsOverridden) {
         cir.returnValue = (ViewportController.height * `pge$getScale`()).toInt()
     }
   }
 
   @Inject(method = ["getScaledWidth"], at = [At("HEAD")], cancellable = true)
-  private fun getScaledWidth(cir: CallbackInfoReturnable<Int?>) {
+  private fun getScaledWidth(cir: CallbackInfoReturnable<Int>) {
     if (ViewportController.isActive && ViewportController.isWindowMetricsOverridden) {
         cir.returnValue = ViewportController.width
     }
   }
 
   @Inject(method = ["getScaledHeight"], at = [At("HEAD")], cancellable = true)
-  private fun getScaledHeight(cir: CallbackInfoReturnable<Int?>) {
+  private fun getScaledHeight(cir: CallbackInfoReturnable<Int>) {
     if (ViewportController.isActive && ViewportController.isWindowMetricsOverridden) {
         cir.returnValue = ViewportController.height
     }

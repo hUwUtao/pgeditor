@@ -1,6 +1,6 @@
 package work.stdpi.pge.editor
 
-interface WindowAccessor {
+interface IWindowAccessor {
   fun `pge$getRealWindowWidth`(): Int
 
   fun `pge$getRealWindowHeight`(): Int
