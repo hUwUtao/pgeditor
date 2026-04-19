@@ -1,6 +1,7 @@
 plugins {
     id("fabric-loom") version "1.15.5"
     id("maven-publish")
+    kotlin("jvm")
 }
 
 version = project.property("mod_version") as String
@@ -24,6 +25,7 @@ dependencies {
     mappings("net.fabricmc:yarn:${project.property("yarn_mappings")}:v2")
     modImplementation("net.fabricmc:fabric-loader:${project.property("loader_version")}")
     modImplementation("net.fabricmc.fabric-api:fabric-api:0.103.0+1.21.1")
+    modImplementation("net.fabricmc:fabric-language-kotlin:1.13.10+kotlin.2.3.20")
     modCompileOnly("com.terraformersmc:modmenu:11.0.1")
     modLocalRuntime("com.terraformersmc:modmenu:11.0.1")
 
@@ -50,23 +52,31 @@ dependencies {
     include("net.java.dev.jna:jna:5.12.1")
     implementation("net.java.dev.jna:jna-platform:5.12.1")
     include("net.java.dev.jna:jna-platform:5.12.1")
+    implementation(kotlin("stdlib-jdk8"))
 }
 
 tasks.processResources {
     inputs.property("version", project.version)
+    inputs.property("minecraft_version", project.property("minecraft_version"))
     filesMatching("fabric.mod.json") {
-        expand("version" to project.version)
+        expand(
+            mapOf(
+                "version" to project.version,
+                "minecraft_version" to project.property("minecraft_version"),
+            )
+        )
     }
 }
 
 java {
     withSourcesJar()
-    sourceCompatibility = JavaVersion.VERSION_21
-    targetCompatibility = JavaVersion.VERSION_21
 }
 
 tasks.jar {
     from("LICENSE") {
         rename { "${it}_${project.base.archivesName.get()}" }
     }
+}
+kotlin {
+    jvmToolchain(21)
 }
