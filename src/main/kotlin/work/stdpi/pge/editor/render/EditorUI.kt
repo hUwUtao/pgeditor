@@ -40,6 +40,9 @@ object EditorUI {
         GLFW.glfwGetWindowAttrib(win.handle, GLFW.GLFW_FOCUSED) == GLFW.GLFW_TRUE
     if (nowWindowFocused && !windowFocused && focused) {
       applet.onCanvasFocusGained()
+    } else if (!nowWindowFocused && windowFocused) {
+      if (focused) applet.onCanvasFocusLost()
+      focused = false
     }
     windowFocused = nowWindowFocused
 
@@ -72,10 +75,7 @@ object EditorUI {
     val (mx, my) =
         when (applet.space) {
           CanvasSpace.FRAMEBUFFER -> mc.mouse.x.toInt() to mc.mouse.y.toInt()
-          CanvasSpace.SCALED -> {
-            val metrics = WindowMetrics.from(mc.window)
-            (mc.mouse.x / metrics.framebufferScale).toInt() to (mc.mouse.y / metrics.framebufferScale).toInt()
-          }
+          CanvasSpace.SCALED -> WindowMetrics.from(mc.window).framebufferToScaled(mc.mouse.x, mc.mouse.y)
         }
 
     if (appletBounds.contains(mx, my)) {
@@ -97,11 +97,16 @@ object EditorUI {
     return false
   }
 
-  fun shouldBlockGameMouseInput(): Boolean = EditorManager.isEnabled
+  fun shouldBlockGameMouseInput(): Boolean {
+    if (!EditorManager.isEnabled) return false
+    if (MinecraftClient.getInstance().currentScreen != null) return false
+    return focused
+  }
 
   fun shouldBlockGameKeyboardInput(key: Int? = null): Boolean {
     if (!EditorManager.isEnabled) return false
-    return key != GLFW.GLFW_KEY_BACKSLASH
+    if (key != null && EditorManager.isToggleKey(key)) return false
+    return focused
   }
 
   fun onMove(x: Double, y: Double) {
@@ -110,10 +115,8 @@ object EditorUI {
     val (mx, my) =
         when (applet.space) {
           CanvasSpace.FRAMEBUFFER -> x.toInt() to y.toInt()
-          CanvasSpace.SCALED -> {
-            val metrics = WindowMetrics.from(MinecraftClient.getInstance().window)
-            (x / metrics.framebufferScale).toInt() to (y / metrics.framebufferScale).toInt()
-          }
+          CanvasSpace.SCALED ->
+              WindowMetrics.from(MinecraftClient.getInstance().window).framebufferToScaled(x, y)
         }
     if (appletBounds.contains(mx, my)) {
       applet.onCanvasPointerMove(
@@ -131,10 +134,7 @@ object EditorUI {
     val (mx, my) =
         when (applet.space) {
           CanvasSpace.FRAMEBUFFER -> mc.mouse.x.toInt() to mc.mouse.y.toInt()
-          CanvasSpace.SCALED -> {
-            val metrics = WindowMetrics.from(mc.window)
-            (mc.mouse.x / metrics.framebufferScale).toInt() to (mc.mouse.y / metrics.framebufferScale).toInt()
-          }
+          CanvasSpace.SCALED -> WindowMetrics.from(mc.window).framebufferToScaled(mc.mouse.x, mc.mouse.y)
         }
 
     if (appletBounds.contains(mx, my)) {
@@ -152,7 +152,7 @@ object EditorUI {
 
   fun onKey(k: Int, a: Int, m: Int): Boolean {
     if (!EditorManager.isEnabled) return false
-    if (k == GLFW.GLFW_KEY_BACKSLASH) return false
+    if (EditorManager.isToggleKey(k)) return false
     val applet = EditorManager.currentApplet
     if (focused) {
       return applet.onCanvasKey(CanvasKeyEvent(k, a, m))
@@ -185,18 +185,23 @@ object EditorUI {
       CanvasRect(
           Math.round(x * metrics.framebufferScaleX),
           Math.round(y * metrics.framebufferScaleY),
-          max(1, Math.round(width * metrics.framebufferScaleX)),
-          max(1, Math.round(height * metrics.framebufferScaleY)))
+          max(1, Math.round((x + width) * metrics.framebufferScaleX) - Math.round(x * metrics.framebufferScaleX)),
+          max(1, Math.round((y + height) * metrics.framebufferScaleY) - Math.round(y * metrics.framebufferScaleY)))
 
   private data class WindowMetrics(
       val scaledWidth: Int,
       val scaledHeight: Int,
       val framebufferScaleX: Float,
       val framebufferScaleY: Float,
-      val framebufferScale: Double,
       val liedScaleX: Float,
       val liedScaleY: Float
   ) {
+    fun framebufferToScaled(x: Double, y: Double): Pair<Int, Int> {
+      val scaledX = if (framebufferScaleX != 0.0f) x / framebufferScaleX else x
+      val scaledY = if (framebufferScaleY != 0.0f) y / framebufferScaleY else y
+      return scaledX.toInt() to scaledY.toInt()
+    }
+
     companion object {
       fun from(window: Window): WindowMetrics {
         val real = window.realMetrics()
@@ -212,7 +217,6 @@ object EditorUI {
             scaledHeight = scaledHeight,
             framebufferScaleX = framebufferScaleX,
             framebufferScaleY = framebufferScaleY,
-            framebufferScale = if (scaledWidth > 0) framebufferWidth.toDouble() / scaledWidth else 1.0,
             liedScaleX = if (scaledWidth > 0) window.scaledWidth.toFloat() / scaledWidth else 1.0f,
             liedScaleY = if (scaledHeight > 0) window.scaledHeight.toFloat() / scaledHeight else 1.0f)
       }

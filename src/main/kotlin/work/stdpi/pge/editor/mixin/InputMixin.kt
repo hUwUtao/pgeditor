@@ -12,8 +12,11 @@ import org.spongepowered.asm.mixin.injection.At
 import org.spongepowered.asm.mixin.injection.Inject
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo
 import work.stdpi.pge.editor.realFramebufferWidth
+import work.stdpi.pge.editor.realFramebufferHeight
 import work.stdpi.pge.editor.realMetrics
 import work.stdpi.pge.editor.realScaledWidth
+import work.stdpi.pge.editor.realScaledHeight
+import work.stdpi.pge.editor.logic.EditorManager
 import work.stdpi.pge.editor.logic.ViewportController
 import work.stdpi.pge.editor.render.EditorUI
 
@@ -30,9 +33,10 @@ class InputMixin {
           MinecraftClient.getInstance().currentScreen == null) {
         val window = MinecraftClient.getInstance().window
         val metrics = window.realMetrics()
-        val s = metrics.realFramebufferWidth.toDouble() / metrics.realScaledWidth
-        this.x -= ViewportController.x * s
-        this.y -= ViewportController.y * s
+        val scaleX = metrics.realFramebufferWidth.toDouble() / metrics.realScaledWidth
+        val scaleY = metrics.realFramebufferHeight.toDouble() / metrics.realScaledHeight
+        this.x -= ViewportController.x * scaleX
+        this.y -= ViewportController.y * scaleY
       }
       EditorUI.onMove(x, y)
     }
@@ -63,7 +67,8 @@ class InputMixin {
   class KeyboardMixin {
     @Inject(method = ["onKey"], at = [At("HEAD")], cancellable = true)
     private fun onKey(win: Long, action: Int, input: KeyInput, ci: CallbackInfo) {
-      if (EditorUI.onKey(input.key(), action, input.modifiers()) ||
+      if (EditorManager.handleToggleKey(input.key(), action, input.modifiers()) ||
+          EditorUI.onKey(input.key(), action, input.modifiers()) ||
           EditorUI.shouldBlockGameKeyboardInput(input.key())) {
         ci.cancel()
       }

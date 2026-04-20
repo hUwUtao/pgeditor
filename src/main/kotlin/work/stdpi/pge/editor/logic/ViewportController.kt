@@ -2,6 +2,7 @@ package work.stdpi.pge.editor.logic
 
 import com.mojang.blaze3d.opengl.GlStateManager
 import net.minecraft.client.util.Window
+import work.stdpi.pge.editor.realFramebufferHeight
 import work.stdpi.pge.editor.realFramebufferWidth
 import work.stdpi.pge.editor.realScaledHeight
 import work.stdpi.pge.editor.realScaledWidth
@@ -58,13 +59,15 @@ object ViewportController {
     val realScaledWidth = metrics.realScaledWidth
     val realFramebufferWidth = metrics.realFramebufferWidth
     val realScaledHeight = metrics.realScaledHeight
+    val realFramebufferHeight = metrics.realFramebufferHeight
     if (realScaledWidth <= 0 || realScaledHeight <= 0) return
 
-    val s = realFramebufferWidth.toDouble() / realScaledWidth
-    val px = (x * s).toInt()
-    val py = ((realScaledHeight - (y + height)) * s).toInt()
-    val pw = (width * s).toInt()
-    val ph = (height * s).toInt()
+    val scaleX = realFramebufferWidth.toDouble() / realScaledWidth
+    val scaleY = realFramebufferHeight.toDouble() / realScaledHeight
+    val px = (x * scaleX).toInt()
+    val py = ((realScaledHeight - (y + height)) * scaleY).toInt()
+    val pw = kotlin.math.max(1, ((x + width) * scaleX).toInt() - px)
+    val ph = kotlin.math.max(1, ((realScaledHeight - y) * scaleY).toInt() - py)
     if (pw > 0 && ph > 0) GlStateManager._viewport(px, py, pw, ph)
   }
 }

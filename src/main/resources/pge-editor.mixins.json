@@ -8,7 +8,9 @@
     "RenderMixin$GameRendererMixin",
     "RenderMixin$InGameHudMixin",
     "InputMixin$MouseMixin",
-    "InputMixin$KeyboardMixin"
+    "InputMixin$KeyboardMixin",
+    "KeyBindingAccessor",
+    "InputKeyAccessor"
   ],
   "client": [
   ],

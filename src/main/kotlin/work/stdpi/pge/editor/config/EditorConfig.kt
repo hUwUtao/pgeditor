@@ -47,7 +47,8 @@ object EditorConfig {
       val dockPercent: Float,
       val terminalCellWidthPx: Int,
       val terminalFontWeight: String?,
-      val terminalSupersample: String?
+      val terminalSupersample: String?,
+      val toggleKey: String?
   ) {
     constructor() :
         this(
@@ -56,7 +57,8 @@ object EditorConfig {
             0.52f,
             20,
             EditorManager.TerminalFontWeight.REGULAR.name,
-            EditorManager.TerminalSupersample.X8.name)
+            EditorManager.TerminalSupersample.X8.name,
+            "key.keyboard.right.shift")
   }
 
   private val LOGGER: Logger = LoggerFactory.getLogger("pge-editor/config")

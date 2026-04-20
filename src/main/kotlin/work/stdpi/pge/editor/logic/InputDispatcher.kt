@@ -112,10 +112,33 @@ object InputDispatcher {
       GLFW.GLFW_KEY_DOWN -> KeyEvent.VK_DOWN
       GLFW.GLFW_KEY_LEFT -> KeyEvent.VK_LEFT
       GLFW.GLFW_KEY_RIGHT -> KeyEvent.VK_RIGHT
+      GLFW.GLFW_KEY_PAGE_UP -> KeyEvent.VK_PAGE_UP
+      GLFW.GLFW_KEY_PAGE_DOWN -> KeyEvent.VK_PAGE_DOWN
+      GLFW.GLFW_KEY_HOME -> KeyEvent.VK_HOME
+      GLFW.GLFW_KEY_END -> KeyEvent.VK_END
+      GLFW.GLFW_KEY_INSERT -> KeyEvent.VK_INSERT
+      GLFW.GLFW_KEY_DELETE -> KeyEvent.VK_DELETE
+      GLFW.GLFW_KEY_LEFT_SHIFT, GLFW.GLFW_KEY_RIGHT_SHIFT -> KeyEvent.VK_SHIFT
+      GLFW.GLFW_KEY_LEFT_CONTROL, GLFW.GLFW_KEY_RIGHT_CONTROL -> KeyEvent.VK_CONTROL
+      GLFW.GLFW_KEY_LEFT_ALT, GLFW.GLFW_KEY_RIGHT_ALT -> KeyEvent.VK_ALT
+      GLFW.GLFW_KEY_F1 -> KeyEvent.VK_F1
+      GLFW.GLFW_KEY_F2 -> KeyEvent.VK_F2
+      GLFW.GLFW_KEY_F3 -> KeyEvent.VK_F3
+      GLFW.GLFW_KEY_F4 -> KeyEvent.VK_F4
+      GLFW.GLFW_KEY_F5 -> KeyEvent.VK_F5
+      GLFW.GLFW_KEY_F6 -> KeyEvent.VK_F6
+      GLFW.GLFW_KEY_F7 -> KeyEvent.VK_F7
+      GLFW.GLFW_KEY_F8 -> KeyEvent.VK_F8
+      GLFW.GLFW_KEY_F9 -> KeyEvent.VK_F9
+      GLFW.GLFW_KEY_F10 -> KeyEvent.VK_F10
+      GLFW.GLFW_KEY_F11 -> KeyEvent.VK_F11
+      GLFW.GLFW_KEY_F12 -> KeyEvent.VK_F12
       else ->
           if ((k >= GLFW.GLFW_KEY_A && k <= GLFW.GLFW_KEY_Z) ||
               (k >= GLFW.GLFW_KEY_0 && k <= GLFW.GLFW_KEY_9))
               k
+          else if (k >= GLFW.GLFW_KEY_KP_0 && k <= GLFW.GLFW_KEY_KP_9)
+              KeyEvent.VK_NUMPAD0 + (k - GLFW.GLFW_KEY_KP_0)
           else KeyEvent.VK_UNDEFINED
     }
   }

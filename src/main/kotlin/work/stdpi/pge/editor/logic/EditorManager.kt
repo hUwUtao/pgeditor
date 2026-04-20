@@ -1,12 +1,13 @@
 package work.stdpi.pge.editor.logic
 
-import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper
 import net.minecraft.client.MinecraftClient
 import net.minecraft.client.option.KeyBinding
 import net.minecraft.client.util.InputUtil
 import org.lwjgl.glfw.GLFW
 import work.stdpi.pge.editor.config.EditorConfig
+import work.stdpi.pge.editor.mixin.InputKeyAccessor
+import work.stdpi.pge.editor.mixin.KeyBindingAccessor
 import work.stdpi.pge.editor.render.applet.GlyphGridApplet
 import work.stdpi.pge.editor.render.applet.IEditorApplet
 import work.stdpi.pge.editor.render.applet.MiniGameApplet
@@ -65,6 +66,7 @@ object EditorManager {
             } else {
                 ViewportController.isActive = false
                 client.mouse.lockCursor()
+                saveConfig()
             }
             client.onResolutionChanged()
         }
@@ -73,32 +75,43 @@ object EditorManager {
     private var configLoaded: Boolean = false
 
     fun init() {
-        loadConfig()
+        val data = EditorConfig.load()
+        val keyStr = data.toggleKey ?: "key.keyboard.backslash"
+        val input = try {
+            InputUtil.fromTranslationKey(keyStr)
+        } catch (e: Exception) {
+            InputUtil.fromTranslationKey("key.keyboard.backslash")
+        }
+
         toggleKey = KeyBindingHelper.registerKeyBinding(
             KeyBinding(
                 "key.pge-editor.toggle",
-                InputUtil.Type.KEYSYM,
-                GLFW.GLFW_KEY_BACKSLASH,
+                (input as InputKeyAccessor).getType(),
+                input.code,
                 KeyBinding.Category.MISC
             )
         )
+        loadConfig(data)
+    }
 
-        ClientTickEvents.END_CLIENT_TICK.register(ClientTickEvents.EndTick { client ->
-            while (toggleKey.wasPressed()) {
-                val handle = client.window.handle
-                // Ctrl + Toggle = Cycle Side
-                if (GLFW.glfwGetKey(handle, GLFW.GLFW_KEY_LEFT_CONTROL) == GLFW.GLFW_PRESS ||
-                    GLFW.glfwGetKey(handle, GLFW.GLFW_KEY_RIGHT_CONTROL) == GLFW.GLFW_PRESS) {
-                    cycleSide()
-                } else if (GLFW.glfwGetKey(handle, GLFW.GLFW_KEY_LEFT_ALT) == GLFW.GLFW_PRESS ||
-                    GLFW.glfwGetKey(handle, GLFW.GLFW_KEY_RIGHT_ALT) == GLFW.GLFW_PRESS) {
-                    cycleApplet()
-                } else {
-                    isEnabled = !isEnabled
-                }
-            }
-            if (isEnabled) update()
-        })
+    fun handleToggleKey(key: Int, action: Int, mods: Int): Boolean {
+        if (!isToggleKey(key)) return false
+        if (action == GLFW.GLFW_RELEASE) return true
+
+        if ((mods and GLFW.GLFW_MOD_CONTROL) != 0) {
+            cycleSide()
+        } else if ((mods and GLFW.GLFW_MOD_ALT) != 0) {
+            cycleApplet()
+        } else {
+            isEnabled = !isEnabled
+        }
+        return true
+    }
+
+    fun isToggleKey(k: Int): Boolean {
+        if (!::toggleKey.isInitialized) return false
+        val bound = (toggleKey as KeyBindingAccessor).getBoundKey()
+        return (bound as InputKeyAccessor).getType() == InputUtil.Type.KEYSYM && bound.code == k
     }
 
     private fun cycleSide() {
@@ -121,8 +134,7 @@ object EditorManager {
         terminalCellWidthPx += delta
     }
 
-    private fun loadConfig() {
-        val data = EditorConfig.load()
+    private fun loadConfig(data: EditorConfig.Data = EditorConfig.load()) {
         side = parseEnum(data.dockSide, DockSide.RIGHT)
         currentAppletIndex = applets.indexOfFirst { it.id.equals(data.renderMode, ignoreCase = true) }
             .takeIf { it >= 0 } ?: 0
@@ -143,7 +155,8 @@ object EditorManager {
                 percent,
                 terminalCellWidthPx,
                 terminalFontWeight.name,
-                terminalSupersample.name
+                terminalSupersample.name,
+                toggleKey.boundKeyTranslationKey
             )
         )
     }
@@ -156,6 +169,4 @@ object EditorManager {
             fallback
         }
     }
-
-
 }
